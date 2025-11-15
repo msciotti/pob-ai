@@ -11,8 +11,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "test": "pnpm build && node dist/test.js",
-    "test:watch": "tsc --watch & node --watch dist/test.js",
+    "test": "pnpm build && node dist/tests/test-runner.js",
+    "test:watch": "tsc --watch & node --watch dist/tests/test-runner.js",
     "mvp": "pnpm build && node dist/mvp-test.js",
     "postinstall": "node scripts/download-pob.js && node scripts/download-luajit.js"
   },

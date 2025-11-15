@@ -7,11 +7,19 @@ local dkjsonPath = arg[2] -- Path to bundled modules (dkjson, base64, xml, etc.)
 
 -- Add bundled modules to package path FIRST so they override any system modules
 if dkjsonPath then
-  package.path = dkjsonPath .. "/?.lua;" .. package.path
+  package.path = dkjsonPath .. "/?.lua;" .. dkjsonPath .. "/?/init.lua;" .. package.path
 end
 
 -- Add PoB modules to path
 package.path = pobPath .. "/?.lua;" .. package.path
+
+-- Add PoB runtime modules (xml, sha1, etc.)
+local runtimeLuaPath = pobPath:gsub("/src$", "") .. "/runtime/lua"
+package.path = runtimeLuaPath .. "/?.lua;" .. runtimeLuaPath .. "/?/init.lua;" .. package.path
+
+-- Add PoB runtime directory for compiled modules (lua-utf8.so, etc.)
+local runtimePath = pobPath:gsub("/src$", "") .. "/runtime"
+package.cpath = runtimePath .. "/?.so;" .. package.cpath
 
 -- Load JSON library (dkjson is a pure Lua JSON library)
 local success, json = pcall(require, "dkjson")
@@ -24,6 +32,10 @@ end
 print(json.encode({status = "loading", message = "Loading PoB..."}))
 io.flush()
 dofile(pobPath .. "/HeadlessWrapper.lua")
+
+-- Initialize inputEvents as empty table for headless mode
+inputEvents = {}
+
 print(json.encode({status = "ready", message = "PoB loaded successfully"}))
 io.flush()
 
@@ -118,13 +130,12 @@ function api.allocatePassive(params)
   -- Find node by name
   for nodeId, node in pairs(build.spec.nodes) do
     if node.name == nodeName then
-      build.spec:AllocNode(nodeId)
+      build.spec:AllocNode(node)
       build.buildFlag = true
 
-      -- Trigger recalculation
-      if build.OnFrame then
-        build:OnFrame()
-      end
+      -- Trigger recalculation using runCallback (HeadlessWrapper's method)
+      inputEvents = {}  -- Refresh for this frame
+      runCallback("OnFrame")
 
       return {success = true, message = "Allocated: " .. nodeName}
     end

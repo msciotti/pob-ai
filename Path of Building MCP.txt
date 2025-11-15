@@ -1,0 +1,43 @@
+# Path of Building MCP
+---
+~Summary~
+Create an MCP for Path of Building, an open-source project for simulating Path of Exile builds, to allow LLMs to interface with the tool and provide build advice and suggestions based on real-number calculations.
+
+~Context~
+Path of Exile is a deep and complex ARPG. Success in end-game content is centered around procuring items and selecting skill tree nodes that help your build “scale” damage, speed, and survivability. There are countless different “scaling” methods that may be suitable for a given build.
+
+Path of Building — [PathOfBuildingCommunity/PathOfBuilding: Offline build planner for Path of Exile.](https://github.com/PathOfBuildingCommunity/PathOfBuilding) — is a simulator that allows you to plan your build and simulate its damage and survivability by freely changing skills, items, and passives without need to commit in-game. For example, before spending significant currency on a new piece of armor, you can import that armor piece to your simulated build and get a real-number calculation of how it would impact your damage and survivability.
+
+~Opportunity~
+Path of Building is a powerful tool, but complex for new and even experienced players to utitlize to the fullest. Simulation decisions are rarely about making one discrete choice vs. another, but instead understanding the way you *want* your build to scale, and then making the most efficient and effective choices toward that goal.
+
+Inexperienced players do not understand how a build is supposed to scale or how to do it efficiently with thousands of choices at their disposal. If we can provide them with a natural-language way to interface with Path of Building, we can allow them to ask questions at any level of depth and get real answers catered to their build, making Path of Exile a far more approachable game.
+
+~How~
+We want to build an MCP to interface with Path of Building. It should have the following user-facing and technical requirements.
+
+User-facing
+- I should be able to ask comparison questions and simulate the outcomes for both discrete choices and directional queries
+  - “How will my damage and defence change if I allocate the Iron Will passive?”
+  - “How much damage would I gain by swapping to a two-handed axe that’s slightly better than my curernt sword, and swapping sword nodes for axe nodes?”
+- I should be able to ask questions about the overall direction and scaling methods of a build
+  - “How does this build scale defense?”
+  - “Would swapping to cold damage conversion be a good way to scale my damage?”
+  - “I don’t have the budget to go Chaos Innoculation yet, how should I be thinking about defense?”
+- I should be able to compare my current build to an end-game build and be given progression steps of how to achieve it
+- I should be able to ask open-ended questions to help guide me to discrete suggestions
+  - “My damage feels low. What should I change?”
+  - “I die a lot. Am I missing any major defensive layers?”
+- I want to see real number comparisons whenever possible
+- There are many examples of top-end builds filtered by skill and ascendency on [Builds - Path of Exile 1 - poe.ninja](https://poe.ninja/poe1/builds)that can be used for comparison
+
+Technical
+- We do not want to create a chat interface. Our goal is to be a data layer that LLMs can utilize
+- As much as we can, we do not want to be responsible for large token cost overhead. But we do want to support natural language for users. If that’s not possible to offload to an LLM client, we are willing to handle it in the MCP layer
+- We’d like to run on easily scalable architecture like Cloudflare Workers, AWS Lambda, GCP functions, etc.
+- We do not want to recreate Path of Building simulation logic and calculations. Path of Building is a LUA program that also includes a command line interface. Whatever architecture we use needs to be able to interface with that kind of program
+
+
+
+
+#product-ideas

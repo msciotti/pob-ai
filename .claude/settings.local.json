@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(ls:*)",
+      "WebSearch",
+      "Bash(pnpm --version:*)",
+      "Bash(pnpm init:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm build:*)",
+      "Bash(node:*)",
+      "Bash(test:*)",
+      "Bash(pnpm remove:*)",
+      "Bash(timeout 30 node:*)",
+      "Bash(pnpm mvp:*)",
+      "Bash(find:*)",
+      "Bash(brew install:*)",
+      "Bash(luajit:*)",
+      "Bash(luarocks list:*)",
+      "Bash(curl:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pob-data/luajit/src/luajit:*)",
+      "Bash(../../pob-data/luajit/src/luajit:*)",
+      "Bash(timeout:*)",
+      "WebFetch(domain:pastebin.com)",
+      "Bash(pkill:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

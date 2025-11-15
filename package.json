@@ -1,0 +1,42 @@
+{
+  "name": "pob-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Path of Building - enables LLMs to analyze and optimize PoE builds",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "pob-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "pnpm build && node dist/test.js",
+    "test:watch": "tsc --watch & node --watch dist/test.js",
+    "mvp": "pnpm build && node dist/mvp-test.js",
+    "postinstall": "node scripts/download-pob.js && node scripts/download-luajit.js"
+  },
+  "keywords": [
+    "mcp",
+    "path-of-building",
+    "poe",
+    "llm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "eslint": "^9.39.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "axios": "^1.13.2",
+    "fengari": "^0.1.4",
+    "tar": "^7.5.2"
+  }
+}

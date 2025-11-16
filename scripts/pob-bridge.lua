@@ -39,6 +39,23 @@ inputEvents = {}
 print(json.encode({status = "ready", message = "PoB loaded successfully"}))
 io.flush()
 
+-- Helper function to refresh the build reference after loading a new build
+function refreshBuild()
+  -- Access the main object through the global mainObject set by SetMainObject in HeadlessWrapper
+  -- We need to use _G to access globals set in HeadlessWrapper's scope
+  local mo = rawget(_G, "mainObject")
+  if not mo then
+    -- Try to access through the build object's parent reference
+    if build and build.main and build.main.modes then
+      build = build.main.modes["BUILD"]
+    end
+  else
+    if mo.main and mo.main.modes then
+      build = mo.main.modes["BUILD"]
+    end
+  end
+end
+
 -- API functions
 local api = {}
 
@@ -51,15 +68,20 @@ function api.loadBuildFromXML(params)
   local xml = params.xml
   local name = params.name or "Imported Build"
 
+  -- IMPORTANT: loadBuildFromXML doesn't reset the build state, it loads into existing build
+  -- To ensure a fresh build with no passive allocations, we need to call newBuild() first
+  -- then load the XML
+  newBuild()
   loadBuildFromXML(xml, name)
 
-  -- Trigger calculation after loading using callback (safer than direct call)
-  local success, err = pcall(function()
-    runCallback("OnFrame")
-  end)
+  -- Refresh build reference to ensure we have the latest build instance
+  if refreshBuild then
+    refreshBuild()
+  end
 
-  if not success then
-    print("Warning: OnFrame failed after load: " .. tostring(err))
+  -- Trigger calculation directly
+  if build and build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
   end
 
   return {success = true, message = "Build loaded: " .. name}
@@ -120,8 +142,107 @@ function api.getStats()
   return {success = true, stats = stats}
 end
 
+-- Rebuild paths from all allocated nodes to find connectable nodes
+function api.rebuildPaths()
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  build.spec:BuildAllDependsAndPaths()
+  return {success = true, message = "Paths rebuilt"}
+end
+
+-- Get information about a node (for pathfinding/debugging)
+function api.getNodeInfo(params)
+  local nodeName = params.nodeName
+
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  for nodeId, node in pairs(build.spec.nodes) do
+    if node.name == nodeName then
+      local info = {
+        id = node.id,
+        name = node.name,
+        type = node.type,
+        isKeystone = node.isKeystone or false,
+        isNotable = node.isNotable or false,
+        isJewelSocket = node.isJewelSocket or false,
+        allocated = node.alloc or false,
+        hasPath = node.path ~= nil,
+        pathLength = node.path and #node.path or 0
+      }
+      return {success = true, node = info}
+    end
+  end
+
+  return {success = false, error = "Node not found: " .. nodeName}
+end
+
+-- Get list of all allocated nodes
+function api.getAllocatedNodes()
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  local allocatedNodes = {}
+  for nodeId, node in pairs(build.spec.allocNodes) do
+    table.insert(allocatedNodes, {
+      id = node.id,
+      name = node.name or "(unnamed)",
+      type = node.type
+    })
+  end
+
+  return {success = true, nodes = allocatedNodes, count = #allocatedNodes}
+end
+
+-- Find path to a node (returns path if exists)
+function api.findPathToNode(params)
+  local nodeName = params.nodeName
+
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  -- Rebuild paths to ensure we have current pathfinding data
+  build.spec:BuildAllDependsAndPaths()
+
+  -- Find the target node
+  for nodeId, node in pairs(build.spec.nodes) do
+    if node.name == nodeName then
+      if not node.path then
+        return {success = false, error = "No path available to: " .. nodeName, hasPath = false}
+      end
+
+      -- Build path info
+      local pathNodes = {}
+      for i, pathNode in ipairs(node.path) do
+        table.insert(pathNodes, {
+          id = pathNode.id,
+          name = pathNode.name or "(unnamed)",
+          allocated = pathNode.alloc or false
+        })
+      end
+
+      return {
+        success = true,
+        hasPath = true,
+        pathLength = #node.path,
+        path = pathNodes,
+        message = "Path found to: " .. nodeName .. " (length: " .. #node.path .. ")"
+      }
+    end
+  end
+
+  return {success = false, error = "Node not found: " .. nodeName}
+end
+
+-- Allocate a passive node with automatic pathfinding
 function api.allocatePassive(params)
   local nodeName = params.nodeName
+  local autoPath = params.autoPath ~= false  -- Default to true
 
   if not build or not build.spec then
     return {success = false, error = "Build not initialized"}
@@ -130,18 +251,63 @@ function api.allocatePassive(params)
   -- Find node by name
   for nodeId, node in pairs(build.spec.nodes) do
     if node.name == nodeName then
+      -- If node is already allocated, return success
+      if node.alloc then
+        return {success = true, message = "Already allocated: " .. nodeName, alreadyAllocated = true}
+      end
+
+      -- Rebuild paths if autopathfinding is enabled
+      if autoPath then
+        build.spec:BuildAllDependsAndPaths()
+      end
+
+      -- Check if node has a path
+      if not node.path then
+        return {
+          success = false,
+          error = "Cannot allocate " .. nodeName .. ": no path to tree. Try allocating nodes closer to your starting location first.",
+          hasPath = false
+        }
+      end
+
+      -- Allocate the node (this will allocate all nodes along the path)
       build.spec:AllocNode(node)
-      build.buildFlag = true
 
-      -- Trigger recalculation using runCallback (HeadlessWrapper's method)
-      inputEvents = {}  -- Refresh for this frame
-      runCallback("OnFrame")
+      -- Trigger recalculation directly (mainObject:OnFrame hangs in headless mode)
+      if build.calcsTab and build.calcsTab.BuildOutput then
+        build.calcsTab:BuildOutput()
+      end
 
-      return {success = true, message = "Allocated: " .. nodeName}
+      return {
+        success = true,
+        message = "Allocated: " .. nodeName,
+        pathLength = #node.path,
+        nodesAllocated = #node.path
+      }
     end
   end
 
   return {success = false, error = "Passive not found: " .. nodeName}
+end
+
+-- Debug: Execute arbitrary Lua code (for testing only)
+function api.debugExec(params)
+  local code = params.code
+  if not code then
+    return {success = false, error = "No code provided"}
+  end
+
+  local func, err = load(code)
+  if not func then
+    return {success = false, error = "Lua error: " .. tostring(err)}
+  end
+
+  local success, result = pcall(func)
+  if not success then
+    return {success = false, error = "Execution error: " .. tostring(result)}
+  end
+
+  return {success = true, result = result}
 end
 
 -- Main loop: read commands from stdin, execute, write results to stdout

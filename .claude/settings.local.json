@@ -23,7 +23,16 @@
       "Bash(../../pob-data/luajit/src/luajit:*)",
       "Bash(timeout:*)",
       "WebFetch(domain:pastebin.com)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(gh issue list:*)",
+      "Bash(git checkout:*)",
+      "Bash(gh issue create:*)",
+      "Bash(git pull:*)",
+      "Bash(env -i PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin /opt/homebrew/bin/node ./node_modules/.bin/tsc:*)",
+      "Bash(/Users/msciotti/github/discord/.local/bin/node:*)",
+      "Bash(echo:*)",
+      "Bash(cat:*)",
+      "Bash(gh issue view:*)"
     ],
     "deny": [],
     "ask": []

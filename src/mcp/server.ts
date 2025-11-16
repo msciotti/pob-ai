@@ -7,9 +7,15 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import { z } from 'zod';
+import { LuaJITRuntime } from '../pob/luajit-runtime.js';
+import { getPobPath } from '../pob/detector.js';
+import { loadConfig } from '../config/index.js';
 
 export class PobMcpServer {
   private mcpServer: McpServer;
+  private runtime: LuaJITRuntime | null = null;
+  private initializationPromise: Promise<void> | null = null;
 
   constructor() {
     // Initialize MCP server with metadata
@@ -19,6 +25,142 @@ export class PobMcpServer {
     });
 
     console.error('[PoB MCP] Server initialized');
+
+    // Register tools
+    this.registerTools();
+  }
+
+  /**
+   * Initialize the LuaJIT runtime (lazy initialization)
+   */
+  private async initializeRuntime(): Promise<void> {
+    if (this.runtime) {
+      return; // Already initialized
+    }
+
+    if (this.initializationPromise) {
+      return this.initializationPromise; // Already initializing
+    }
+
+    this.initializationPromise = (async () => {
+      try {
+        console.error('[PoB MCP] Initializing LuaJIT runtime...');
+
+        // Load config and detect PoB path
+        const config = await loadConfig();
+        const pobPath = await getPobPath(config.pobPath);
+
+        console.error(`[PoB MCP] Using PoB at: ${pobPath}`);
+
+        // Create and initialize runtime
+        this.runtime = new LuaJITRuntime(pobPath);
+        await this.runtime.initialize();
+
+        console.error('[PoB MCP] LuaJIT runtime initialized successfully');
+      } catch (error) {
+        console.error('[PoB MCP] Failed to initialize runtime:', error);
+        throw error;
+      }
+    })();
+
+    return this.initializationPromise;
+  }
+
+  /**
+   * Register all MCP tools
+   */
+  private registerTools(): void {
+    // Tool: load_build
+    this.mcpServer.registerTool(
+      'load_build',
+      {
+        title: 'Load Build',
+        description: 'Load a Path of Building build from a pastebin code (e.g., "uCLE0msa")',
+        inputSchema: {
+          source: z.string(),
+          buildName: z.string(),
+        },
+        outputSchema: {
+          success: z.boolean(),
+          message: z.string(),
+          buildName: z.string(),
+          statsAvailable: z.boolean(),
+          sampleStats: z.record(z.number()),
+        },
+      },
+      async ({ source, buildName }: { source: string; buildName: string }) => {
+        try {
+          // Ensure runtime is initialized
+          await this.initializeRuntime();
+
+          if (!this.runtime) {
+            throw new Error('Runtime not initialized');
+          }
+
+          // Load the build from pastebin code
+          const finalBuildName = buildName || 'Imported Build';
+          console.error(`[PoB MCP] Loading build from pastebin: ${source}`);
+          await this.runtime.importFromCode(source, finalBuildName);
+
+          // Try to fetch stats to verify, but don't fail if not available yet
+          console.error('[PoB MCP] Attempting to fetch build stats...');
+          let stats: Record<string, number> = {};
+          let statsAvailable = false;
+
+          try {
+            stats = await this.runtime.getBuildStats();
+            statsAvailable = Object.keys(stats).length > 0;
+            console.error(`[PoB MCP] Build stats retrieved: ${Object.keys(stats).length} stats available`);
+          } catch (error) {
+            // Stats not available yet - that's ok, build is still loaded
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error(`[PoB MCP] Stats not immediately available: ${errorMsg}`);
+          }
+
+          // Extract a few sample stats if available
+          const sampleStats: Record<string, any> = {};
+          if (statsAvailable) {
+            const keyStats = ['Level', 'Life', 'TotalDPS', 'EnergyShield', 'Armour', 'Evasion'];
+            for (const key of keyStats) {
+              if (stats[key] !== undefined) {
+                sampleStats[key] = stats[key];
+              }
+            }
+          }
+
+          const output = {
+            success: true,
+            message: `Build '${finalBuildName}' loaded successfully from pastebin code`,
+            buildName: finalBuildName,
+            statsAvailable,
+            sampleStats,
+          };
+
+          console.error(`[PoB MCP] Build loaded successfully`);
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+            structuredContent: output,
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error('[PoB MCP] Failed to load build:', errorMessage);
+
+          const output = {
+            success: false,
+            error: `Failed to load build: ${errorMessage}`,
+          };
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+            structuredContent: output,
+            isError: true,
+          };
+        }
+      }
+    );
+
+    console.error('[PoB MCP] Tools registered: load_build');
   }
 
   /**
@@ -40,6 +182,13 @@ export class PobMcpServer {
    */
   async close(): Promise<void> {
     try {
+      // Clean up runtime first
+      if (this.runtime) {
+        this.runtime.destroy();
+        this.runtime = null;
+        console.error('[PoB MCP] Runtime destroyed');
+      }
+
       await this.mcpServer.close();
       console.error('[PoB MCP] Server closed successfully');
     } catch (error) {

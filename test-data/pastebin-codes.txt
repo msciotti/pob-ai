@@ -1,0 +1,31 @@
+# Test Pastebin Codes for Path of Building MCP Server
+
+## Valid Codes
+
+### uCLE0msa
+- **Description**: Test build for verifying build loading functionality
+- **Status**: ✅ Verified working
+- **Last Tested**: 2025-11-16
+- **Notes**: Successfully loads via `load_build` tool. Build imports correctly, though stats may not be immediately available (known PoB headless mode limitation).
+
+## Usage
+
+These pastebin codes can be used to test the `load_build` MCP tool:
+
+```bash
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"load_build","arguments":{"source":"uCLE0msa","buildName":"Test Build"}}}'
+```
+
+Expected response:
+```json
+{
+  "success": true,
+  "message": "Build 'Test Build' loaded successfully from pastebin code",
+  "buildName": "Test Build",
+  "statsAvailable": false,
+  "sampleStats": {}
+}
+```

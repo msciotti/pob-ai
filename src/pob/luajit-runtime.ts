@@ -366,6 +366,144 @@ export class LuaJITRuntime {
   }
 
   /**
+   * Socket a jewel into a passive tree jewel socket node
+   */
+  async socketJewel(nodeId: number, itemText: string): Promise<{ jewelId: number; jewelName: string }> {
+    const response = await this.sendCommand('socketJewel', { nodeId, itemText });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to socket jewel');
+    }
+    return {
+      jewelId: response.jewelId,
+      jewelName: response.jewelName
+    };
+  }
+
+  /**
+   * Unsocket a jewel from a passive tree jewel socket node
+   */
+  async unsocketJewel(nodeId: number): Promise<void> {
+    const response = await this.sendCommand('unsocketJewel', { nodeId });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to unsocket jewel');
+    }
+  }
+
+  /**
+   * Get all socketed jewels
+   */
+  async getSocketedJewels(): Promise<Array<{
+    nodeId: number;
+    nodeName: string;
+    jewelId: number;
+    jewelName: string;
+  }>> {
+    const response = await this.sendCommand('getSocketedJewels', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get socketed jewels');
+    }
+    return response.jewels || [];
+  }
+
+  /**
+   * Get all available jewel sockets (allocated jewel socket nodes)
+   */
+  async getAvailableJewelSockets(): Promise<Array<{
+    nodeId: number;
+    nodeName: string;
+    hasJewel: boolean;
+  }>> {
+    const response = await this.sendCommand('getAvailableJewelSockets', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get available jewel sockets');
+    }
+    return response.sockets || [];
+  }
+
+  /**
+   * Set character level (1-100)
+   */
+  async setCharacterLevel(level: number): Promise<void> {
+    const response = await this.sendCommand('setCharacterLevel', { level });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set character level');
+    }
+  }
+
+  /**
+   * Get current character level
+   */
+  async getCharacterLevel(): Promise<number> {
+    const response = await this.sendCommand('getCharacterLevel', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get character level');
+    }
+    return response.level;
+  }
+
+  /**
+   * Set character class
+   */
+  async setCharacterClass(className: string): Promise<void> {
+    const response = await this.sendCommand('setCharacterClass', { className });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set character class');
+    }
+  }
+
+  /**
+   * Get current character class
+   */
+  async getCharacterClass(): Promise<string> {
+    const response = await this.sendCommand('getCharacterClass', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get character class');
+    }
+    return response.className;
+  }
+
+  /**
+   * Set ascendancy class
+   */
+  async setAscendancy(ascendClassName: string): Promise<void> {
+    const response = await this.sendCommand('setAscendancy', { ascendClassName });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set ascendancy');
+    }
+  }
+
+  /**
+   * Get current ascendancy
+   */
+  async getAscendancy(): Promise<string> {
+    const response = await this.sendCommand('getAscendancy', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get ascendancy');
+    }
+    return response.ascendClassName;
+  }
+
+  /**
+   * Set bandit reward choice
+   */
+  async setBandit(bandit: 'None' | 'Alira' | 'Oak' | 'Kraityn'): Promise<void> {
+    const response = await this.sendCommand('setBandit', { bandit });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set bandit');
+    }
+  }
+
+  /**
+   * Set pantheon choices
+   */
+  async setPantheon(major?: string, minor?: string): Promise<void> {
+    const response = await this.sendCommand('setPantheon', { major, minor });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set pantheon');
+    }
+  }
+
+  /**
    * Cleanup
    */
   destroy(): void {

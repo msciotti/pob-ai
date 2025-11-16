@@ -857,6 +857,82 @@ function api.setPantheon(params)
   return {success = true, major = major or build.pantheonMajorGod, minor = minor or build.pantheonMinorGod}
 end
 
+-- Set a configuration value
+function api.setConfig(params)
+  local var = params.var
+  local value = params.value
+
+  if not build or not build.configTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not var then
+    return {success = false, error = "No var provided"}
+  end
+
+  if value == nil then
+    return {success = false, error = "No value provided"}
+  end
+
+  -- Get the active config set
+  local configSet = build.configTab.configSets[build.configTab.activeConfigSetId]
+  if not configSet then
+    return {success = false, error = "No active config set"}
+  end
+
+  -- Set the value
+  configSet.input[var] = value
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {success = true, message = "Config set: " .. var .. " = " .. tostring(value)}
+end
+
+-- Get a configuration value
+function api.getConfig(params)
+  local var = params.var
+
+  if not build or not build.configTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not var then
+    return {success = false, error = "No var provided"}
+  end
+
+  -- Get the active config set
+  local configSet = build.configTab.configSets[build.configTab.activeConfigSetId]
+  if not configSet then
+    return {success = false, error = "No active config set"}
+  end
+
+  local value = configSet.input[var]
+  return {success = true, var = var, value = value}
+end
+
+-- Get all configuration values
+function api.getAllConfig(params)
+  if not build or not build.configTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  -- Get the active config set
+  local configSet = build.configTab.configSets[build.configTab.activeConfigSetId]
+  if not configSet then
+    return {success = false, error = "No active config set"}
+  end
+
+  local configs = {}
+  for var, value in pairs(configSet.input) do
+    configs[var] = value
+  end
+
+  return {success = true, config = configs}
+end
+
 -- Debug: Execute arbitrary Lua code (for testing only)
 function api.debugExec(params)
   local code = params.code

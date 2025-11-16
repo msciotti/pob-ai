@@ -10,6 +10,7 @@ import { skillGemTests } from './skill-gems.test.js';
 import { flaskTests } from './flasks.test.js';
 import { jewelTests } from './jewels.test.js';
 import { characterConfigTests } from './character-config.test.js';
+import { configurationTests } from './configuration.test.js';
 
 const TEST_SUITES: TestSuite[] = [
   passiveAllocationTests,
@@ -18,6 +19,7 @@ const TEST_SUITES: TestSuite[] = [
   flaskTests,
   jewelTests,
   characterConfigTests,
+  configurationTests,
 ];
 
 async function runTests() {

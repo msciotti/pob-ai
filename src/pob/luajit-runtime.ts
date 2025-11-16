@@ -421,6 +421,89 @@ export class LuaJITRuntime {
   }
 
   /**
+   * Set character level (1-100)
+   */
+  async setCharacterLevel(level: number): Promise<void> {
+    const response = await this.sendCommand('setCharacterLevel', { level });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set character level');
+    }
+  }
+
+  /**
+   * Get current character level
+   */
+  async getCharacterLevel(): Promise<number> {
+    const response = await this.sendCommand('getCharacterLevel', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get character level');
+    }
+    return response.level;
+  }
+
+  /**
+   * Set character class
+   */
+  async setCharacterClass(className: string): Promise<void> {
+    const response = await this.sendCommand('setCharacterClass', { className });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set character class');
+    }
+  }
+
+  /**
+   * Get current character class
+   */
+  async getCharacterClass(): Promise<string> {
+    const response = await this.sendCommand('getCharacterClass', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get character class');
+    }
+    return response.className;
+  }
+
+  /**
+   * Set ascendancy class
+   */
+  async setAscendancy(ascendClassName: string): Promise<void> {
+    const response = await this.sendCommand('setAscendancy', { ascendClassName });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set ascendancy');
+    }
+  }
+
+  /**
+   * Get current ascendancy
+   */
+  async getAscendancy(): Promise<string> {
+    const response = await this.sendCommand('getAscendancy', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get ascendancy');
+    }
+    return response.ascendClassName;
+  }
+
+  /**
+   * Set bandit reward choice
+   */
+  async setBandit(bandit: 'None' | 'Alira' | 'Oak' | 'Kraityn'): Promise<void> {
+    const response = await this.sendCommand('setBandit', { bandit });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set bandit');
+    }
+  }
+
+  /**
+   * Set pantheon choices
+   */
+  async setPantheon(major?: string, minor?: string): Promise<void> {
+    const response = await this.sendCommand('setPantheon', { major, minor });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set pantheon');
+    }
+  }
+
+  /**
    * Cleanup
    */
   destroy(): void {

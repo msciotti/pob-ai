@@ -290,6 +290,109 @@ function api.allocatePassive(params)
   return {success = false, error = "Passive not found: " .. nodeName}
 end
 
+-- Equip an item from raw item text
+function api.equipItem(params)
+  local itemText = params.itemText
+  local slotName = params.slotName  -- e.g., "Weapon 1", "Helmet", "Body Armour", "Ring 1", etc.
+
+  if not build or not build.itemsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not itemText then
+    return {success = false, error = "No item text provided"}
+  end
+
+  if not slotName then
+    return {success = false, error = "No slot name provided"}
+  end
+
+  -- Create item from raw text
+  local newItem = new("Item", itemText)
+  if not newItem.base then
+    return {success = false, error = "Failed to create item from text. Invalid item format."}
+  end
+
+  -- Add item to build
+  build.itemsTab:AddItem(newItem, true)  -- true = no auto-equip
+
+  -- Equip item in slot using the slots control (not itemSet directly)
+  if not build.itemsTab.slots[slotName] then
+    return {success = false, error = "Invalid slot name: " .. slotName}
+  end
+
+  -- Use the slot control's SetSelItemId method for proper equipping
+  build.itemsTab.slots[slotName]:SetSelItemId(newItem.id)
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {
+    success = true,
+    message = "Equipped item in " .. slotName,
+    itemId = newItem.id,
+    itemName = newItem.name or "Unknown"
+  }
+end
+
+-- Unequip item from a slot
+function api.unequipItem(params)
+  local slotName = params.slotName
+
+  if not build or not build.itemsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not slotName then
+    return {success = false, error = "No slot name provided"}
+  end
+
+  if not build.itemsTab.slots[slotName] then
+    return {success = false, error = "Invalid slot name: " .. slotName}
+  end
+
+  -- Use the slot control's SetSelItemId method
+  build.itemsTab.slots[slotName]:SetSelItemId(0)  -- 0 = no item
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {success = true, message = "Unequipped item from " .. slotName}
+end
+
+-- Get list of all equipped items
+function api.getEquippedItems(params)
+  if not build or not build.itemsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  local itemSet = build.itemsTab.activeItemSet
+  if not itemSet then
+    return {success = false, error = "No active item set"}
+  end
+
+  local equippedItems = {}
+  for slotName, slot in pairs(itemSet) do
+    if type(slot) == "table" and slot.selItemId and slot.selItemId ~= 0 then
+      local item = build.itemsTab.items[slot.selItemId]
+      if item then
+        table.insert(equippedItems, {
+          slot = slotName,
+          itemId = item.id,
+          name = item.name or "Unknown",
+          rarity = item.rarity
+        })
+      end
+    end
+  end
+
+  return {success = true, items = equippedItems, count = #equippedItems}
+end
+
 -- Debug: Execute arbitrary Lua code (for testing only)
 function api.debugExec(params)
   local code = params.code

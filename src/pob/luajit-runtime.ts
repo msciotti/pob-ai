@@ -266,6 +266,47 @@ export class LuaJITRuntime {
   }
 
   /**
+   * Equip an item in a specific slot
+   * @param itemText - The raw item text (in PoB format)
+   * @param slotName - Slot name (e.g., "Weapon 1", "Helmet", "Body Armour", "Ring 1", etc.)
+   */
+  async equipItem(itemText: string, slotName: string): Promise<void> {
+    const response = await this.sendCommand('equipItem', { itemText, slotName });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to equip item');
+    }
+    console.log(response.message);
+  }
+
+  /**
+   * Unequip an item from a specific slot
+   * @param slotName - Slot name to clear
+   */
+  async unequipItem(slotName: string): Promise<void> {
+    const response = await this.sendCommand('unequipItem', { slotName });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to unequip item');
+    }
+    console.log(response.message);
+  }
+
+  /**
+   * Get all currently equipped items
+   */
+  async getEquippedItems(): Promise<Array<{
+    slot: string;
+    itemId: number;
+    name: string;
+    rarity: string;
+  }>> {
+    const response = await this.sendCommand('getEquippedItems', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get equipped items');
+    }
+    return response.items || [];
+  }
+
+  /**
    * Cleanup
    */
   destroy(): void {

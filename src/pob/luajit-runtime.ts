@@ -307,6 +307,65 @@ export class LuaJITRuntime {
   }
 
   /**
+   * Add a socket group with gems
+   * @param label - Label for the socket group
+   * @param gems - Array of gems with {name, level, quality, enabled}
+   * @param slot - Optional item slot (e.g., "Weapon 1", "Body Armour")
+   */
+  async addSocketGroup(
+    label: string,
+    gems: Array<{ name: string; level?: number; quality?: number; enabled?: boolean }>,
+    slot?: string
+  ): Promise<void> {
+    const gemsData = gems.map(gem => ({
+      nameSpec: gem.name,
+      level: gem.level ?? 20,
+      quality: gem.quality ?? 0,
+      enabled: gem.enabled ?? true,
+    }));
+
+    const response = await this.sendCommand('addSocketGroup', {
+      label,
+      gems: gemsData,
+      slot,
+    });
+
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to add socket group');
+    }
+    console.log(response.message);
+  }
+
+  /**
+   * Clear all socket groups
+   */
+  async clearSocketGroups(): Promise<void> {
+    const response = await this.sendCommand('clearSocketGroups', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to clear socket groups');
+    }
+    console.log(response.message);
+  }
+
+  /**
+   * Get all socket groups and their gems
+   */
+  async getSocketGroups(): Promise<Array<{
+    index: number;
+    label: string;
+    enabled: boolean;
+    slot?: string;
+    gemCount: number;
+    gems: Array<{ name: string; level: number; quality: number; enabled: boolean }>;
+  }>> {
+    const response = await this.sendCommand('getSocketGroups', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get socket groups');
+    }
+    return response.socketGroups || [];
+  }
+
+  /**
    * Cleanup
    */
   destroy(): void {

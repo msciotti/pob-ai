@@ -393,6 +393,134 @@ function api.getEquippedItems(params)
   return {success = true, items = equippedItems, count = #equippedItems}
 end
 
+-- Add a socket group with gems
+function api.addSocketGroup(params)
+  local label = params.label or "New Group"
+  local gems = params.gems or {}  -- Array of {nameSpec, level, quality, enabled}
+  local enabled = params.enabled ~= false  -- Default to true
+  local slot = params.slot  -- Optional: "Weapon 1", "Body Armour", etc.
+
+  if not build or not build.skillsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  -- Create socket group
+  local socketGroup = {
+    enabled = enabled,
+    includeInFullDPS = false,
+    groupCount = 1,
+    label = label,
+    slot = slot,
+    source = nil,
+    mainActiveSkill = 1,
+    mainActiveSkillCalcs = 1,
+    gemList = {}
+  }
+
+  -- Add gems to the group
+  for i, gemData in ipairs(gems) do
+    local gemInstance = {
+      nameSpec = gemData.nameSpec or gemData.name,
+      level = gemData.level or 20,
+      quality = gemData.quality or 0,
+      enabled = gemData.enabled ~= false,  -- Default to true
+      enableGlobal1 = true,
+      enableGlobal2 = false,
+      count = 1
+    }
+    table.insert(socketGroup.gemList, gemInstance)
+  end
+
+  -- Process the socket group (initializes gem data)
+  build.skillsTab:ProcessSocketGroup(socketGroup)
+
+  -- Ensure skill sets are initialized
+  if not build.skillsTab.activeSkillSetId or build.skillsTab.activeSkillSetId == 0 then
+    build.skillsTab:SetActiveSkillSet(1)
+  end
+
+  -- Get the active skill set
+  local activeSkillSet = build.skillsTab.skillSets[build.skillsTab.activeSkillSetId]
+  if not activeSkillSet then
+    return {success = false, error = "No active skill set after initialization"}
+  end
+
+  -- Update activeSkillSet reference
+  build.skillsTab.activeSkillSet = activeSkillSet
+
+  table.insert(activeSkillSet.socketGroupList, socketGroup)
+
+  -- Update socket group list reference
+  build.skillsTab.socketGroupList = activeSkillSet.socketGroupList
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {
+    success = true,
+    message = "Added socket group: " .. label,
+    groupIndex = #activeSkillSet.socketGroupList,
+    gemCount = #socketGroup.gemList
+  }
+end
+
+-- Clear all socket groups
+function api.clearSocketGroups(params)
+  if not build or not build.skillsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  local activeSkillSet = build.skillsTab.activeSkillSet
+  if not activeSkillSet then
+    return {success = false, error = "No active skill set"}
+  end
+
+  -- Clear all socket groups
+  activeSkillSet.socketGroupList = {}
+  build.skillsTab.socketGroupList = {}
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {success = true, message = "Cleared all socket groups"}
+end
+
+-- Get all socket groups
+function api.getSocketGroups(params)
+  if not build or not build.skillsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  local socketGroups = {}
+  for i, group in ipairs(build.skillsTab.socketGroupList) do
+    local groupInfo = {
+      index = i,
+      label = group.label or "",
+      enabled = group.enabled,
+      slot = group.slot,
+      gemCount = #group.gemList,
+      gems = {}
+    }
+
+    for j, gem in ipairs(group.gemList) do
+      table.insert(groupInfo.gems, {
+        name = gem.nameSpec,
+        level = gem.level,
+        quality = gem.quality,
+        enabled = gem.enabled
+      })
+    end
+
+    table.insert(socketGroups, groupInfo)
+  end
+
+  return {success = true, socketGroups = socketGroups, count = #socketGroups}
+end
+
 -- Debug: Execute arbitrary Lua code (for testing only)
 function api.debugExec(params)
   local code = params.code

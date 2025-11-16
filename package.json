@@ -11,6 +11,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "start:dev": "pnpm build && node dist/index.js",
     "test": "pnpm build && node dist/tests/test-runner.js",
     "test:watch": "tsc --watch & node --watch dist/tests/test-runner.js",
     "mvp": "pnpm build && node dist/mvp-test.js",
@@ -28,6 +29,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.5",
     "@types/node": "^24.10.1",
     "eslint": "^9.39.1",
     "prettier": "^3.6.2",
@@ -36,6 +38,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.22.0",
     "axios": "^1.13.2",
+    "express": "^5.1.0",
     "fengari": "^0.1.4",
     "tar": "^7.5.2"
   }

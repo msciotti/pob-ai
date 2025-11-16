@@ -504,6 +504,44 @@ export class LuaJITRuntime {
   }
 
   /**
+   * Set a configuration value
+   *
+   * Examples:
+   * - setConfig('conditionFullLife', true) - Set always on full life
+   * - setConfig('conditionMoving', true) - Set always moving
+   * - setConfig('enemyIsBoss', 'Boss') - Set enemy as boss
+   * - setConfig('enemyLevel', 85) - Set enemy level
+   */
+  async setConfig(var_: string, value: boolean | string | number): Promise<void> {
+    const response = await this.sendCommand('setConfig', { var: var_, value });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set config');
+    }
+  }
+
+  /**
+   * Get a configuration value
+   */
+  async getConfig(var_: string): Promise<boolean | string | number | null> {
+    const response = await this.sendCommand('getConfig', { var: var_ });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get config');
+    }
+    return response.value;
+  }
+
+  /**
+   * Get all configuration values
+   */
+  async getAllConfig(): Promise<Record<string, boolean | string | number>> {
+    const response = await this.sendCommand('getAllConfig', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get all config');
+    }
+    return response.config || {};
+  }
+
+  /**
    * Cleanup
    */
   destroy(): void {

@@ -1,177 +1,115 @@
 # Path of Building MCP Server
 
-MCP server that provides LLM access to Path of Building calculations for build analysis and optimization.
+MCP server that provides LLMs access to Path of Building's calculation engine for analyzing and optimizing Path of Exile builds.
 
-## Status: 95% Complete - Ready for Testing
+## What This Does
 
-### ✅ What's Built
+Enables AI assistants like Claude to:
+- Load Path of Exile builds from pastebin or XML
+- Modify passive tree allocations
+- Calculate real stat changes using PoB's engine
+- Explain build optimizations with accurate numbers
 
-1. **Complete TypeScript Infrastructure**
-   - Full project setup with pnpm + TypeScript
-   - Automatic PoB bundling (downloads on install)
-   - Multi-platform PoB detection (Windows/macOS/Linux)
-   - Config system with sensible defaults
+## Quick Start
 
-2. **LuaJIT Bridge** ⭐ **NEW APPROACH**
-   - Runs actual PoB HeadlessWrapper.lua via LuaJIT subprocess
-   - JSON API for build operations
-   - TypeScript wrapper with async/await interface
-   - **Uses real PoB - fully working, maintained by PoB team!**
+### Prerequisites
 
-3. **API Methods Ready**
-   - `newBuild()` - Create new build
-   - `loadBuildFromXML(xml, name)` - Load from pastebin/XML
-   - `getBuildStats()` - Get all calculated stats
-   - `allocatePassive(nodeName)` - Allocate passives
-   - Automatic recalculation after changes
+- **Node.js** 18 or higher
+- **pnpm** (install with `npm install -g pnpm`)
 
-## 🚀 Quick Start
+### Installation
 
-### 1. Install System Dependencies
+```bash
+git clone <this-repo>
+cd pob-ai
+pnpm install
+```
 
-**LuaJIT** (required for running PoB):
+The install script will automatically:
+- Download Path of Building source
+- Build bundled LuaJIT (requires build tools on your system)
+
+**Linux/macOS Build Tools:**
 ```bash
 # macOS
-brew install luajit
+xcode-select --install
 
 # Ubuntu/Debian
-sudo apt install luajit
+sudo apt install build-essential
 
-# Fedora/RedHat
-sudo dnf install luajit
-
-# Windows
-choco install luajit
-# OR download from https://luajit.org/download.html
+# Fedora/RHEL
+sudo dnf groupinstall "Development Tools"
 ```
 
-**dkjson** (JSON library for Lua):
-```bash
-# After installing luajit, install luarocks (Lua package manager):
-# macOS: brew install luarocks
-# Ubuntu: sudo apt install luarocks
-# Windows: included with LuaJIT installer
-
-# Then install dkjson:
-luarocks install dkjson
-```
-
-### 2. Install Project
+### Build and Test
 
 ```bash
-# Clone and install
-git clone <repo>
-cd pob-mcp
-pnpm install  # Automatically downloads Path of Building
-```
-
-**Note:** The `postinstall` script will:
-- ✅ Download Path of Building source automatically
-- ℹ️ Check for LuaJIT and show installation instructions if missing
-
-### 🎯 Running the MVP Test
-
-```bash
-# 1. Install dependencies
-pnpm install  # Downloads PoB automatically
-
-# 2. Build
+# Compile TypeScript
 pnpm build
 
-# 3. Run MVP test
+# Run test suite
+pnpm test
+
+# Run MVP demo (Resolute Technique test)
 pnpm mvp
 ```
 
-**Expected output:**
-```
-=== PoB MVP Test: Resolute Technique ===
+### Running the MCP Server
 
-1. Initializing...
-   Loading PoB...
-   PoB loaded successfully
-   ✓ Initialized
-
-2. Creating new build...
-   ✓ Build created
-
-3. Loading test build...
-   ✓ Build loaded
-
-4. Getting initial crit chance...
-   Initial CritChance: 5%
-
-5. Allocating Resolute Technique...
-   ✓ Passive allocated
-
-6. Getting final crit chance...
-   Final CritChance: 0%
-
-7. Verification...
-   ✅ SUCCESS! Crit chance is 0% after Resolute Technique
-
-=== MVP Test Complete ===
+```bash
+pnpm start
 ```
 
-## Architecture
-
-### Old Approach (❌ Abandoned)
-- Tried to run PoB in fengari (pure JS Lua VM)
-- Hit endless GUI mocking requirements
-- Would be extremely brittle
-
-### New Approach (✅ Current)
-```
-TypeScript MCP Server
-       ↓ (spawn)
-    LuaJIT Process
-       ↓ (loads)
-  HeadlessWrapper.lua
-       ↓ (loads)
-   Full PoB Application
-  (minus GUI display)
-       ↓ (JSON over stdin/stdout)
-    TypeScript API
-```
-
-**Benefits:**
-- ✅ Uses **actual PoB** - no mocking needed
-- ✅ Maintained by PoB team - auto-updates work
-- ✅ 100% calculation accuracy
-- ✅ Clean, simple architecture
-- ✅ Easy to debug (can test Lua script standalone)
+**Note:** MCP server implementation is not yet complete. See [docs/TASKS.md](docs/TASKS.md) for current work status.
 
 ## Project Structure
 
 ```
-pob-mcp/
+pob-ai/
 ├── src/
-│   ├── pob/
-│   │   ├── detector.ts          # PoB installation detection
-│   │   ├── luajit-runtime.ts    # LuaJIT subprocess wrapper ⭐ NEW
-│   │   └── lua-runtime.ts       # Old fengari approach (deprecated)
-│   ├── config/                  # Configuration management
-│   ├── mvp-test.ts              # MVP test script
-│   └── test.ts                  # Basic initialization test
+│   ├── pob/                    # PoB runtime integration
+│   │   ├── luajit-runtime.ts   # Main API wrapper
+│   │   ├── detector.ts         # PoB path detection
+│   │   └── passive-tree-utils.ts # Pathfinding utilities
+│   ├── config/                 # Configuration management
+│   ├── tests/                  # Test suite
+│   │   ├── passive-allocation.test.ts
+│   │   ├── item-equip.test.ts
+│   │   ├── skill-gems.test.ts
+│   │   └── jewels.test.ts
+│   └── mvp-test.ts            # MVP demonstration
 ├── scripts/
-│   ├── download-pob.js          # Auto-downloads PoB on install
-│   └── pob-bridge.lua           # Lua API bridge ⭐ NEW
-├── pob-data/                    # Bundled PoB source (auto-downloaded)
-└── package.json
+│   ├── download-pob.js        # PoB source downloader
+│   ├── download-luajit.js     # LuaJIT build script
+│   └── pob-bridge.lua         # Lua ↔ TypeScript JSON bridge
+├── docs/                      # Documentation
+│   ├── MVP.md                 # Product requirements
+│   ├── ARCHITECTURE.md        # Technical decisions
+│   ├── TASKS.md              # Work breakdown
+│   ├── API_REFERENCE.md      # LuaJITRuntime API
+│   └── POB_INTERNALS.md      # PoB integration guide
+├── pob-data/                  # Downloaded PoB source
+└── test-data/                 # Sample builds
 ```
 
-## Configuration
+## Architecture
 
-Config file: `~/.config/pob-mcp/config.json`
-
-```json
-{
-  "pobPath": "/custom/path/to/pob",  // Optional: Override auto-detection
-  "cacheTtl": 1800000,                // 30 minutes
-  "maxCachedBuilds": 100
-}
+```
+TypeScript MCP Server
+       ↓ spawn
+    LuaJIT Process
+       ↓ loads
+  HeadlessWrapper.lua
+       ↓ loads
+   Full PoB Application
+  (minus GUI display)
+       ↓ JSON over stdin/stdout
+    TypeScript API
 ```
 
-## API Examples
+**Key Insight:** We run the **actual** Path of Building code via LuaJIT subprocess. This gives us 100% calculation accuracy and automatic compatibility with PoB updates.
+
+## Example Usage
 
 ```typescript
 import { LuaJITRuntime } from './pob/luajit-runtime';
@@ -179,66 +117,98 @@ import { LuaJITRuntime } from './pob/luajit-runtime';
 const runtime = new LuaJITRuntime('/path/to/pob');
 await runtime.initialize();
 
-// Load build
-await runtime.loadBuildFromXML(xmlString, 'My Build');
+// Load build from pastebin
+await runtime.importFromCode('eNqVVt1u...', 'My Build');
 
 // Get stats
-const stats = await runtime.getBuildStats();
-console.log('DPS:', stats.TotalDPS);
-console.log('Life:', stats.Life);
-console.log('Crit Chance:', stats.CritChance);
+let stats = await runtime.getBuildStats();
+console.log(`DPS: ${stats.TotalDPS}, Life: ${stats.Life}`);
 
-// Modify build
+// Allocate passive
 await runtime.allocatePassive('Resolute Technique');
 
 // Get updated stats
-const newStats = await runtime.getBuildStats();
-console.log('New Crit Chance:', newStats.CritChance); // Should be 0
+stats = await runtime.getBuildStats();
+console.log(`New crit chance: ${stats.CritChance}%`); // 0%
 
 runtime.destroy();
 ```
 
-## Next Steps (After MVP)
-
-1. **MCP Protocol** - Wrap LuaJITRuntime with MCP server
-2. **Build Cache** - Cache loaded builds with TTL/LRU eviction
-3. **More Operations** - Items, gems, config options, tree optimization
-4. **poe.ninja Integration** - Compare builds to top players
-5. **Full MCP Tools** - Expose all operations as MCP tools
-
-## Key Learnings
-
-1. **HeadlessWrapper exists!** - PoB has a working CLI interface
-2. **Don't mock the GUI** - Run actual LuaJIT subprocess instead
-3. **JSON bridge is simple** - ~100 lines of Lua + TypeScript
-4. **PoB tests show the way** - Look at `spec/System/TestBuilds_spec.lua`
-
 ## Development
 
 ```bash
-# Install
+# Install dependencies
 pnpm install
 
-# Build
+# Build TypeScript
 pnpm build
 
-# Watch mode
+# Watch mode (auto-rebuild)
 pnpm dev
 
-# Test basic initialization
+# Run tests
 pnpm test
 
-# Test full MVP
+# Run MVP demo
 pnpm mvp
+```
+
+## Configuration
+
+Optional config file: `~/.config/pob-mcp/config.json`
+
+```json
+{
+  "pobPath": "/custom/path/to/pob",
+  "cacheTtl": 1800000,
+  "maxCachedBuilds": 100
+}
+```
+
+If not specified, PoB is auto-detected or the bundled version is used.
+
+## Documentation
+
+- **[MVP.md](docs/MVP.md)** - Product scope and requirements
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Technical decisions and data flow
+- **[TASKS.md](docs/TASKS.md)** - Current work and task breakdown
+- **[API_REFERENCE.md](docs/API_REFERENCE.md)** - LuaJITRuntime API documentation
+- **[POB_INTERNALS.md](docs/POB_INTERNALS.md)** - PoB integration guide for contributors
+
+## Contributing
+
+See [docs/TASKS.md](docs/TASKS.md) for current work items. Tasks are designed to be picked up by mid-level engineers working in parallel.
+
+1. Pick a task from TASKS.md
+2. Create feature branch: `git checkout -b feature/task-name`
+3. Implement and test
+4. Create PR
+
+## Testing
+
+The test suite covers:
+- **Passive allocation** - Tree pathfinding and node allocation
+- **Item equipment** - Equipping items in various slots
+- **Skill gems** - Socket groups and support gems
+- **Jewels** - Jewel socketing in passive tree
+
+```bash
+pnpm test
 ```
 
 ## Requirements
 
 - **Node.js** >= 18.0.0
-- **LuaJIT** (for PoB execution)
-- **luarocks** + **dkjson** (for JSON support)
-- **Path of Building** (auto-downloaded or locally installed)
+- **pnpm** (package manager)
+- **Build tools** (for LuaJIT compilation)
+  - macOS: Xcode Command Line Tools
+  - Linux: build-essential or equivalent
+  - Windows: Not yet tested (contributions welcome)
 
 ## License
 
 MIT
+
+## Credits
+
+Built on top of [Path of Building Community Fork](https://github.com/PathOfBuildingCommunity/PathOfBuilding) - the amazing build planning tool maintained by the PoE community.

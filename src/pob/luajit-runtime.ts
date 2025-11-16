@@ -194,11 +194,75 @@ export class LuaJITRuntime {
   }
 
   /**
-   * Allocate a passive node by name
+   * Allocate a passive node by name (with automatic pathfinding)
    */
-  async allocatePassive(nodeName: string): Promise<void> {
-    const response = await this.sendCommand('allocatePassive', { nodeName });
+  async allocatePassive(nodeName: string, autoPath: boolean = true): Promise<void> {
+    const response = await this.sendCommand('allocatePassive', { nodeName, autoPath });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to allocate passive');
+    }
     console.log(response.message);
+  }
+
+  /**
+   * Rebuild paths from allocated nodes (for pathfinding)
+   */
+  async rebuildPaths(): Promise<void> {
+    const response = await this.sendCommand('rebuildPaths');
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to rebuild paths');
+    }
+  }
+
+  /**
+   * Get information about a specific passive node
+   */
+  async getNodeInfo(nodeName: string): Promise<{
+    id: string;
+    name: string;
+    type: string;
+    isKeystone: boolean;
+    isNotable: boolean;
+    isJewelSocket: boolean;
+    allocated: boolean;
+    hasPath: boolean;
+    pathLength: number;
+  }> {
+    const response = await this.sendCommand('getNodeInfo', { nodeName });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get node info');
+    }
+    return response.node;
+  }
+
+  /**
+   * Get list of all allocated passive nodes
+   */
+  async getAllocatedNodes(): Promise<Array<{ id: string; name: string; type: string }>> {
+    const response = await this.sendCommand('getAllocatedNodes');
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get allocated nodes');
+    }
+    return response.nodes;
+  }
+
+  /**
+   * Find the shortest path to a passive node
+   */
+  async findPathToNode(nodeName: string): Promise<{
+    hasPath: boolean;
+    pathLength: number;
+    path: Array<{ id: string; name: string; allocated: boolean }>;
+  }> {
+    const response = await this.sendCommand('findPathToNode', { nodeName });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to find path');
+    }
+    return {
+      hasPath: response.hasPath,
+      pathLength: response.pathLength,
+      path: response.path,
+    };
   }
 
   /**

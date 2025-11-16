@@ -366,6 +366,61 @@ export class LuaJITRuntime {
   }
 
   /**
+   * Socket a jewel into a passive tree jewel socket node
+   */
+  async socketJewel(nodeId: number, itemText: string): Promise<{ jewelId: number; jewelName: string }> {
+    const response = await this.sendCommand('socketJewel', { nodeId, itemText });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to socket jewel');
+    }
+    return {
+      jewelId: response.jewelId,
+      jewelName: response.jewelName
+    };
+  }
+
+  /**
+   * Unsocket a jewel from a passive tree jewel socket node
+   */
+  async unsocketJewel(nodeId: number): Promise<void> {
+    const response = await this.sendCommand('unsocketJewel', { nodeId });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to unsocket jewel');
+    }
+  }
+
+  /**
+   * Get all socketed jewels
+   */
+  async getSocketedJewels(): Promise<Array<{
+    nodeId: number;
+    nodeName: string;
+    jewelId: number;
+    jewelName: string;
+  }>> {
+    const response = await this.sendCommand('getSocketedJewels', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get socketed jewels');
+    }
+    return response.jewels || [];
+  }
+
+  /**
+   * Get all available jewel sockets (allocated jewel socket nodes)
+   */
+  async getAvailableJewelSockets(): Promise<Array<{
+    nodeId: number;
+    nodeName: string;
+    hasJewel: boolean;
+  }>> {
+    const response = await this.sendCommand('getAvailableJewelSockets', {});
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to get available jewel sockets');
+    }
+    return response.sockets || [];
+  }
+
+  /**
    * Cleanup
    */
   destroy(): void {

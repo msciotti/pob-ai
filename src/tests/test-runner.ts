@@ -7,11 +7,13 @@ import { TestSuite, TestResult, initializeRuntime } from './test-utils.js';
 import { passiveAllocationTests } from './passive-allocation.test.js';
 import { itemEquipTests } from './item-equip.test.js';
 import { skillGemTests } from './skill-gems.test.js';
+import { jewelTests } from './jewels.test.js';
 
 const TEST_SUITES: TestSuite[] = [
   passiveAllocationTests,
   itemEquipTests,
   skillGemTests,
+  jewelTests,
 ];
 
 async function runTests() {

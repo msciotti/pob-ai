@@ -521,6 +521,142 @@ function api.getSocketGroups(params)
   return {success = true, socketGroups = socketGroups, count = #socketGroups}
 end
 
+-- Socket a jewel into a passive tree jewel socket
+function api.socketJewel(params)
+  local nodeId = params.nodeId
+  local itemText = params.itemText
+
+  if not build or not build.spec or not build.itemsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not nodeId then
+    return {success = false, error = "No nodeId provided"}
+  end
+
+  if not itemText then
+    return {success = false, error = "No item text provided"}
+  end
+
+  -- Check if node exists and is allocated
+  local node = build.spec.nodes[nodeId]
+  if not node then
+    return {success = false, error = "Node not found: " .. tostring(nodeId)}
+  end
+
+  if not node.alloc then
+    return {success = false, error = "Node not allocated. Allocate the jewel socket node first."}
+  end
+
+  -- Check if node is a jewel socket
+  if not node.isJewelSocket then
+    return {success = false, error = "Node " .. tostring(nodeId) .. " is not a jewel socket"}
+  end
+
+  -- Create item from text
+  local newItem = new("Item", itemText)
+  if not newItem.base then
+    return {success = false, error = "Failed to create item from text. Invalid item format."}
+  end
+
+  -- Verify it's a jewel
+  if not newItem.jewelData then
+    return {success = false, error = "Item is not a jewel"}
+  end
+
+  -- Add item to build's item list
+  build.itemsTab:AddItem(newItem, true)  -- true = no auto-equip
+
+  -- Socket the jewel
+  build.spec.jewels[nodeId] = newItem.id
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {
+    success = true,
+    message = "Socketed jewel in node " .. tostring(nodeId),
+    jewelId = newItem.id,
+    jewelName = newItem.name or "Unknown"
+  }
+end
+
+-- Unsocket a jewel from a passive tree jewel socket
+function api.unsocketJewel(params)
+  local nodeId = params.nodeId
+
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not nodeId then
+    return {success = false, error = "No nodeId provided"}
+  end
+
+  -- Check if there's a jewel in this socket
+  if not build.spec.jewels[nodeId] or build.spec.jewels[nodeId] == 0 then
+    return {success = false, error = "No jewel socketed in node " .. tostring(nodeId)}
+  end
+
+  -- Unsocket the jewel (set to 0)
+  build.spec.jewels[nodeId] = 0
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {success = true, message = "Unsocketed jewel from node " .. tostring(nodeId)}
+end
+
+-- Get all socketed jewels
+function api.getSocketedJewels(params)
+  if not build or not build.spec or not build.itemsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  local socketedJewels = {}
+  for nodeId, itemId in pairs(build.spec.jewels) do
+    if itemId and itemId > 0 then
+      local item = build.itemsTab.items[itemId]
+      if item then
+        local node = build.spec.nodes[nodeId]
+        table.insert(socketedJewels, {
+          nodeId = nodeId,
+          nodeName = node and node.name or "Unknown",
+          jewelId = itemId,
+          jewelName = item.name or "Unknown"
+        })
+      end
+    end
+  end
+
+  return {success = true, jewels = socketedJewels, count = #socketedJewels}
+end
+
+-- Get all available jewel sockets (allocated nodes that are jewel sockets)
+function api.getAvailableJewelSockets(params)
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  local jewelSockets = {}
+  for nodeId, node in pairs(build.spec.nodes) do
+    if node.isJewelSocket and node.alloc then
+      local hasJewel = build.spec.jewels[nodeId] and build.spec.jewels[nodeId] > 0
+      table.insert(jewelSockets, {
+        nodeId = nodeId,
+        nodeName = node.name or "Jewel Socket",
+        hasJewel = hasJewel
+      })
+    end
+  end
+
+  return {success = true, sockets = jewelSockets, count = #jewelSockets}
+end
+
 -- Debug: Execute arbitrary Lua code (for testing only)
 function api.debugExec(params)
   local code = params.code

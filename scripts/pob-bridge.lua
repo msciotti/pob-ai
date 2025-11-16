@@ -657,6 +657,206 @@ function api.getAvailableJewelSockets(params)
   return {success = true, sockets = jewelSockets, count = #jewelSockets}
 end
 
+-- Set character level
+function api.setCharacterLevel(params)
+  local level = params.level
+
+  if not build then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not level or level < 1 or level > 100 then
+    return {success = false, error = "Level must be between 1 and 100"}
+  end
+
+  build.characterLevel = level
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {success = true, level = level}
+end
+
+-- Get character level
+function api.getCharacterLevel(params)
+  if not build then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  return {success = true, level = build.characterLevel}
+end
+
+-- Set character class
+function api.setCharacterClass(params)
+  local className = params.className
+
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not className then
+    return {success = false, error = "Class name required"}
+  end
+
+  -- Validate class name
+  local validClasses = {"SCION", "MARAUDER", "RANGER", "WITCH", "DUELIST", "TEMPLAR", "SHADOW"}
+  local isValid = false
+  local normalizedName = className:upper()
+  for _, valid in ipairs(validClasses) do
+    if normalizedName == valid then
+      isValid = true
+      className = valid
+      break
+    end
+  end
+
+  if not isValid then
+    return {success = false, error = "Invalid class name. Valid: " .. table.concat(validClasses, ", ")}
+  end
+
+  -- Find class ID
+  local classId = nil
+  for id, class in pairs(build.spec.tree.classes) do
+    if class.name:upper() == className then
+      classId = id
+      break
+    end
+  end
+
+  if not classId then
+    return {success = false, error = "Could not find class ID for: " .. className}
+  end
+
+  -- Set the class
+  build.spec:SelectClass(classId)
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {success = true, className = build.spec.curClassName}
+end
+
+-- Get character class
+function api.getCharacterClass(params)
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  return {success = true, className = build.spec.curClassName}
+end
+
+-- Set ascendancy
+function api.setAscendancy(params)
+  local ascendClassName = params.ascendClassName
+
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not ascendClassName then
+    return {success = false, error = "Ascendancy class name required"}
+  end
+
+  -- Find ascendancy ID
+  local ascendClassId = nil
+  if build.spec.curClass and build.spec.curClass.classes then
+    for id, ascendClass in pairs(build.spec.curClass.classes) do
+      if ascendClass.name == ascendClassName then
+        ascendClassId = id
+        break
+      end
+    end
+  end
+
+  if not ascendClassId then
+    return {success = false, error = "Could not find ascendancy: " .. ascendClassName}
+  end
+
+  -- Set the ascendancy
+  build.spec:SelectAscendClass(ascendClassId)
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {success = true, ascendClassName = build.spec.curAscendClassName}
+end
+
+-- Get ascendancy
+function api.getAscendancy(params)
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  return {success = true, ascendClassName = build.spec.curAscendClassName or "None"}
+end
+
+-- Set bandit reward
+function api.setBandit(params)
+  local bandit = params.bandit
+
+  if not build then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not bandit then
+    return {success = false, error = "Bandit choice required"}
+  end
+
+  -- Valid choices: "None", "Alira", "Oak", "Kraityn"
+  local validBandits = {"None", "Alira", "Oak", "Kraityn"}
+  local isValid = false
+  for _, valid in ipairs(validBandits) do
+    if bandit == valid then
+      isValid = true
+      break
+    end
+  end
+
+  if not isValid then
+    return {success = false, error = "Invalid bandit choice. Valid: " .. table.concat(validBandits, ", ")}
+  end
+
+  build.bandit = bandit
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {success = true, bandit = bandit}
+end
+
+-- Set pantheon
+function api.setPantheon(params)
+  local major = params.major
+  local minor = params.minor
+
+  if not build then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if major then
+    build.pantheonMajorGod = major
+  end
+
+  if minor then
+    build.pantheonMinorGod = minor
+  end
+
+  -- Trigger build recalculation
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {success = true, major = major or build.pantheonMajorGod, minor = minor or build.pantheonMinorGod}
+end
+
 -- Debug: Execute arbitrary Lua code (for testing only)
 function api.debugExec(params)
   local code = params.code
@@ -704,3 +904,4 @@ while true do
 
   ::continue::
 end
+

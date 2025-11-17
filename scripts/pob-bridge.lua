@@ -19,7 +19,7 @@ package.path = runtimeLuaPath .. "/?.lua;" .. runtimeLuaPath .. "/?/init.lua;" .
 
 -- Add PoB runtime directory for compiled modules (lua-utf8.so, etc.)
 local runtimePath = pobPath:gsub("/src$", "") .. "/runtime"
-package.cpath = runtimePath .. "/?.so;" .. package.cpath
+package.cpath = runtimePath .. "/lib/lua/5.1/?.so;" .. runtimePath .. "/?.so;" .. package.cpath
 
 -- Load JSON library (dkjson is a pure Lua JSON library)
 local success, json = pcall(require, "dkjson")

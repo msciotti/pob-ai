@@ -40,7 +40,10 @@ export class LuaJITRuntime {
     return new Promise((resolve, reject) => {
       // Use absolute paths since we're setting cwd to PoB directory
       const bridgeScript = join(__dirname, '..', '..', 'scripts', 'pob-bridge.lua');
-      const absoluteLuajitPath = this.luajitPath.startsWith('/') ? this.luajitPath : join(process.cwd(), this.luajitPath);
+      // Only convert to absolute path if it's a relative path (contains / or \), not a bare command name
+      const absoluteLuajitPath = this.luajitPath.includes('/') || this.luajitPath.includes('\\')
+        ? (this.luajitPath.startsWith('/') ? this.luajitPath : join(process.cwd(), this.luajitPath))
+        : this.luajitPath;
       const absoluteDkjsonPath = this.dkjsonPath.startsWith('/') ? this.dkjsonPath : join(process.cwd(), this.dkjsonPath);
 
       console.log(`Using LuaJIT: ${this.luajitPath}`);

@@ -28,6 +28,23 @@ if not success then
   os.exit(1)
 end
 
+-- Mock lua-utf8 module for headless mode (GUI text controls need this, but we don't)
+package.preload["lua-utf8"] = function()
+  return {
+    len = function(s) return #s end,
+    sub = string.sub,
+    upper = string.upper,
+    lower = string.lower,
+    reverse = string.reverse,
+    byte = string.byte,
+    char = string.char,
+    find = string.find,
+    gmatch = string.gmatch,
+    gsub = string.gsub,
+    match = string.match,
+  }
+end
+
 -- Load HeadlessWrapper (this loads all of PoB)
 print(json.encode({status = "loading", message = "Loading PoB..."}))
 io.flush()
@@ -38,23 +55,6 @@ inputEvents = {}
 
 print(json.encode({status = "ready", message = "PoB loaded successfully"}))
 io.flush()
-
--- Helper function to refresh the build reference after loading a new build
-function refreshBuild()
-  -- Access the main object through the global mainObject set by SetMainObject in HeadlessWrapper
-  -- We need to use _G to access globals set in HeadlessWrapper's scope
-  local mo = rawget(_G, "mainObject")
-  if not mo then
-    -- Try to access through the build object's parent reference
-    if build and build.main and build.main.modes then
-      build = build.main.modes["BUILD"]
-    end
-  else
-    if mo.main and mo.main.modes then
-      build = mo.main.modes["BUILD"]
-    end
-  end
-end
 
 -- API functions
 local api = {}
@@ -68,15 +68,13 @@ function api.loadBuildFromXML(params)
   local xml = params.xml
   local name = params.name or "Imported Build"
 
-  -- IMPORTANT: loadBuildFromXML doesn't reset the build state, it loads into existing build
-  -- To ensure a fresh build with no passive allocations, we need to call newBuild() first
-  -- then load the XML
-  newBuild()
+  -- loadBuildFromXML calls SetMode which creates a fresh build, no need for newBuild()
   loadBuildFromXML(xml, name)
 
-  -- Refresh build reference to ensure we have the latest build instance
-  if refreshBuild then
-    refreshBuild()
+  -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
+  -- variable doesn't get updated. We must manually refresh it to avoid stale references.
+  if build and build.main and build.main.modes then
+    build = build.main.modes["BUILD"]
   end
 
   -- Trigger calculation directly
@@ -100,19 +98,15 @@ function api.importFromCode(params)
   -- Now load the XML
   loadBuildFromXML(xmlText, name)
 
-  -- Trigger calculation directly (BuildOutput is more reliable than OnFrame in headless mode)
+  -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
+  -- variable doesn't get updated. We must manually refresh it to avoid stale references.
+  if build and build.main and build.main.modes then
+    build = build.main.modes["BUILD"]
+  end
+
+  -- Trigger calculation directly
   if build and build.calcsTab and build.calcsTab.BuildOutput then
-    print("DEBUG: Calling BuildOutput after import...")
-    local success, err = pcall(function()
-      build.calcsTab:BuildOutput()
-    end)
-    if not success then
-      print("Warning: BuildOutput failed after import: " .. tostring(err))
-    else
-      print("DEBUG: BuildOutput completed successfully")
-    end
-  else
-    print("DEBUG: BuildOutput not available - build.calcsTab exists: " .. tostring(build and build.calcsTab ~= nil))
+    build.calcsTab:BuildOutput()
   end
 
   return {success = true, message = "Build imported: " .. name}
@@ -123,19 +117,6 @@ function api.getStats()
     return {success = false, error = "No build loaded"}
   end
 
-  -- Try to trigger calculation if not done yet
-  if not build.calcsTab or not build.calcsTab.mainOutput then
-    if build.calcsTab and build.calcsTab.BuildOutput then
-      local success, err = pcall(function()
-        build.calcsTab:BuildOutput()
-      end)
-      if not success then
-        return {success = false, error = "Failed to calculate: " .. tostring(err)}
-      end
-    end
-  end
-
-  -- Check again after calculation attempt
   if not build.calcsTab or not build.calcsTab.mainOutput then
     return {success = false, error = "Build calculations not available"}
   end

@@ -94,6 +94,9 @@ function api.importFromCode(params)
   local decoded = common.base64.decode(buf)
   local xmlText = Inflate(decoded)
 
+  -- IMPORTANT: Create a fresh build first (same as loadBuildFromXML API)
+  newBuild()
+
   -- Now load the XML
   loadBuildFromXML(xmlText, name)
 
@@ -103,10 +106,9 @@ function api.importFromCode(params)
     build = build.main.modes["BUILD"]
   end
 
-  -- Trigger calculation directly
-  if build and build.calcsTab and build.calcsTab.BuildOutput then
-    build.calcsTab:BuildOutput()
-  end
+  -- Trigger OnFrame to ensure calculations are done
+  -- This is what the HeadlessWrapper does after loading (matching loadBuildFromXML pattern)
+  runCallback("OnFrame")
 
   return {success = true, message = "Build imported: " .. name}
 end
@@ -261,10 +263,9 @@ function api.allocatePassive(params)
       -- Allocate the node (this will allocate all nodes along the path)
       build.spec:AllocNode(node)
 
-      -- Trigger recalculation directly (mainObject:OnFrame hangs in headless mode)
-      if build.calcsTab and build.calcsTab.BuildOutput then
-        build.calcsTab:BuildOutput()
-      end
+      -- Trigger OnFrame to ensure calculations are done
+      -- This matches the pattern used in loadBuildFromXML and importFromCode
+      runCallback("OnFrame")
 
       return {
         success = true,

@@ -173,7 +173,65 @@ export class PobMcpServer {
       }
     );
 
-    console.error('[PoB MCP] Tools registered: load_build');
+    // Tool: get_build_stats
+    this.mcpServer.registerTool(
+      'get_build_stats',
+      {
+        title: 'Get Build Stats',
+        description: 'Get all calculated stats for the current build',
+        inputSchema: {
+          categories: z.array(z.string()).optional().default(['all']),
+        },
+        outputSchema: {
+          success: z.boolean(),
+          stats: z.record(z.number()),
+          statCount: z.number(),
+        },
+      },
+      async ({ categories = ['all'] }: { categories?: string[] }) => {
+        try {
+          // Ensure runtime is initialized
+          await this.initializeRuntime();
+
+          if (!this.runtime) {
+            throw new Error('Runtime not initialized');
+          }
+
+          console.error('[PoB MCP] Getting build stats...');
+          const stats = await this.runtime.getBuildStats();
+          const statCount = Object.keys(stats).length;
+
+          console.error(`[PoB MCP] Retrieved ${statCount} stats`);
+
+          const output = {
+            success: true,
+            stats,
+            statCount,
+          };
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+            structuredContent: output,
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error('[PoB MCP] Failed to get build stats:', errorMessage);
+
+          const output = {
+            success: false,
+            error: `Failed to get build stats: ${errorMessage}`,
+          };
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+            structuredContent: output,
+            isError: true,
+          };
+        }
+      }
+    );
+
+    console.error('[PoB MCP] Tools registered: load_build, get_build_stats');
   }
 
   /**

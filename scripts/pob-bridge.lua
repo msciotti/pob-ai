@@ -100,13 +100,19 @@ function api.importFromCode(params)
   -- Now load the XML
   loadBuildFromXML(xmlText, name)
 
-  -- Trigger calculation
-  local success, err = pcall(function()
-    runCallback("OnFrame")
-  end)
-
-  if not success then
-    print("Warning: OnFrame failed after import: " .. tostring(err))
+  -- Trigger calculation directly (BuildOutput is more reliable than OnFrame in headless mode)
+  if build and build.calcsTab and build.calcsTab.BuildOutput then
+    print("DEBUG: Calling BuildOutput after import...")
+    local success, err = pcall(function()
+      build.calcsTab:BuildOutput()
+    end)
+    if not success then
+      print("Warning: BuildOutput failed after import: " .. tostring(err))
+    else
+      print("DEBUG: BuildOutput completed successfully")
+    end
+  else
+    print("DEBUG: BuildOutput not available - build.calcsTab exists: " .. tostring(build and build.calcsTab ~= nil))
   end
 
   return {success = true, message = "Build imported: " .. name}
@@ -119,11 +125,13 @@ function api.getStats()
 
   -- Try to trigger calculation if not done yet
   if not build.calcsTab or not build.calcsTab.mainOutput then
-    local success, err = pcall(function()
-      runCallback("OnFrame")
-    end)
-    if not success then
-      return {success = false, error = "Failed to calculate: " .. tostring(err)}
+    if build.calcsTab and build.calcsTab.BuildOutput then
+      local success, err = pcall(function()
+        build.calcsTab:BuildOutput()
+      end)
+      if not success then
+        return {success = false, error = "Failed to calculate: " .. tostring(err)}
+      end
     end
   end
 

@@ -1,5 +1,5 @@
 /**
- * MVP Test: Load build, check crit, allocate Resolute Technique, verify crit is 0
+ * MVP Test: Load build, allocate passives, verify stat changes
  */
 import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
@@ -21,7 +21,7 @@ async function loadTestBuild(): Promise<string> {
 }
 
 async function main() {
-  console.log('=== PoB MVP Test: Resolute Technique ===\n');
+  console.log('=== PoB MVP Tests ===\n');
 
   try {
     // 1. Setup
@@ -82,7 +82,52 @@ async function main() {
       console.log('   Something went wrong with the passive allocation');
     }
 
-    console.log('\n=== MVP Test Complete ===');
+    console.log('\n' + '='.repeat(50));
+    console.log('TEST 2: Chaos Inoculation');
+    console.log('='.repeat(50) + '\n');
+
+    // 7. Reload build for second test
+    console.log('7. Reloading test build for Chaos Inoculation test...');
+    await runtime.loadBuildFromXML(buildXML, 'CI Test Build');
+    console.log('   ✓ Build reloaded\n');
+
+    // 8. Get initial Life
+    console.log('8. Getting initial Life...');
+    console.log('   Calculating build stats...');
+    stats = await runtime.getBuildStats();
+    const initialLife = stats['Life'] || 0;
+    console.log(`   ✓ Stats calculated`);
+    console.log(`   Initial Life: ${initialLife}\n`);
+
+    // 9. Allocate Chaos Inoculation
+    console.log('9. Allocating Chaos Inoculation passive...');
+    console.log('   Searching for passive node...');
+    await runtime.allocatePassive('Chaos Inoculation');
+    console.log('   ✓ Passive node allocated');
+    console.log('   Build will auto-recalculate with new passive\n');
+
+    // 10. Get final Life
+    console.log('10. Getting final Life after passive allocation...');
+    console.log('    Recalculating build stats...');
+    stats = await runtime.getBuildStats();
+    const finalLife = stats['Life'] || 0;
+    const finalES = stats['EnergyShield'] || 0;
+    console.log(`    ✓ Stats recalculated`);
+    console.log(`    Final Life: ${finalLife}`);
+    console.log(`    Final Energy Shield: ${finalES}\n`);
+
+    // 11. Verification
+    console.log('11. Verification...');
+    if (finalLife === 1) {
+      console.log('    ✅ SUCCESS! Life is 1 after Chaos Inoculation');
+      console.log('    The passive correctly sets max Life to 1');
+      console.log('    Character is now immune to chaos damage (relies on Energy Shield)');
+    } else {
+      console.log(`    ⚠️  FAILED: Expected 1, got ${finalLife}`);
+      console.log('    Something went wrong with the passive allocation');
+    }
+
+    console.log('\n=== All MVP Tests Complete ===');
 
     // Cleanup
     console.log('\nCleaning up runtime...');

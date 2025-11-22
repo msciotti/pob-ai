@@ -12,6 +12,11 @@ import { LuaJITRuntime } from '../pob/luajit-runtime.js';
 import { getPobPath } from '../pob/detector.js';
 import { loadConfig } from '../config/index.js';
 
+/**
+ * Key build statistics to include in sample stats response
+ */
+const KEY_BUILD_STATS = ['Level', 'Life', 'TotalDPS', 'EnergyShield', 'Armour', 'Evasion'] as const;
+
 export class PobMcpServer {
   private mcpServer: McpServer;
   private runtime: LuaJITRuntime | null = null;
@@ -58,6 +63,8 @@ export class PobMcpServer {
 
         console.error('[PoB MCP] LuaJIT runtime initialized successfully');
       } catch (error) {
+        // Clear promise on error to allow retry
+        this.initializationPromise = null;
         console.error('[PoB MCP] Failed to initialize runtime:', error);
         throw error;
       }
@@ -90,6 +97,13 @@ export class PobMcpServer {
       },
       async ({ source, buildName }: { source: string; buildName: string }) => {
         try {
+          // Validate pastebin code format
+          if (!/^[a-zA-Z0-9]{8}$/.test(source)) {
+            throw new Error(
+              'Invalid pastebin code format. Expected 8 alphanumeric characters (e.g., "uCLE0msa")'
+            );
+          }
+
           // Ensure runtime is initialized
           await this.initializeRuntime();
 
@@ -118,11 +132,10 @@ export class PobMcpServer {
           }
 
           // Extract a few sample stats if available
-          const sampleStats: Record<string, any> = {};
+          const sampleStats: Record<string, number> = {};
           if (statsAvailable) {
-            const keyStats = ['Level', 'Life', 'TotalDPS', 'EnergyShield', 'Armour', 'Evasion'];
-            for (const key of keyStats) {
-              if (stats[key] !== undefined) {
+            for (const key of KEY_BUILD_STATS) {
+              if (stats[key] !== undefined && typeof stats[key] === 'number') {
                 sampleStats[key] = stats[key];
               }
             }

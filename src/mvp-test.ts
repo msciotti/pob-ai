@@ -1,24 +1,12 @@
 /**
- * MVP Test: Load build, allocate passives, verify stat changes
+ * MVP Test: Create fresh builds, allocate passives, verify stat changes
+ *
+ * Following PoB's own testing pattern: use newBuild() for tests that modify builds.
+ * XML-loaded builds are read-only by design - modifications don't properly trigger recalculation.
  */
-import { readFile } from 'fs/promises';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { loadConfig } from './config/index.js';
 import { getPobPath } from './pob/detector.js';
 import { LuaJITRuntime } from './pob/luajit-runtime.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Load test build from file
-async function loadTestBuild(): Promise<string> {
-  const buildPath = join(__dirname, '..', 'test-data', 'sample-build.txt');
-  console.log(`   Reading build from: ${buildPath}`);
-  const content = await readFile(buildPath, 'utf-8');
-  console.log(`   Build file size: ${content.length} characters`);
-  return content;
-}
 
 async function main() {
   console.log('=== PoB MVP Tests ===\n');
@@ -42,31 +30,34 @@ async function main() {
     await runtime.initialize();
     console.log('   ✓ Runtime fully initialized\n');
 
-    // 2. Load test build (this creates a build automatically)
-    console.log('2. Loading test build...');
-    const buildXML = await loadTestBuild();
-    console.log('   Parsing and loading XML into PoB...');
-    await runtime.loadBuildFromXML(buildXML, 'Test Build');
-    console.log('   ✓ Build loaded and parsed\n');
+    console.log('='.repeat(50));
+    console.log('TEST 1: Resolute Technique');
+    console.log('='.repeat(50) + '\n');
 
-    // 3. Get initial crit chance
-    console.log('3. Getting initial crit chance...');
-    console.log('   Calculating build stats...');
+    // 2. Create fresh build for RT test
+    console.log('2. Creating fresh build...');
+    await runtime.newBuild();
+    console.log('   ✓ Fresh build created\n');
+
+    // 3. Add crit via custom mod
+    console.log('3. Adding crit chance via custom mod...');
+    await runtime.setCustomMods('+50% to Critical Strike Chance\n');
     let stats = await runtime.getBuildStats();
     const initialCrit = stats['CritChance'] || 0;
-    console.log(`   ✓ Stats calculated`);
+    console.log(`   ✓ Custom mod applied`);
     console.log(`   Initial CritChance: ${initialCrit}%\n`);
+
+    if (initialCrit === 0) {
+      console.log('   ⚠️  WARNING: Custom mod did not add crit. RT test may be invalid.\n');
+    }
 
     // 4. Allocate Resolute Technique
     console.log('4. Allocating Resolute Technique passive...');
-    console.log('   Searching for passive node...');
     await runtime.allocatePassive('Resolute Technique');
-    console.log('   ✓ Passive node allocated');
-    console.log('   Build will auto-recalculate with new passive\n');
+    console.log('   ✓ Passive node allocated\n');
 
-    // 5. Get final crit chance (recalculation happens automatically)
+    // 5. Get final crit chance
     console.log('5. Getting final crit chance after passive allocation...');
-    console.log('   Recalculating build stats...');
     stats = await runtime.getBuildStats();
     const finalCrit = stats['CritChance'] || 0;
     console.log(`   ✓ Stats recalculated`);
@@ -74,26 +65,24 @@ async function main() {
 
     // 6. Verification
     console.log('6. Verification...');
-    if (finalCrit === 0) {
-      console.log('   ✅ SUCCESS! Crit chance is 0% after Resolute Technique');
+    if (finalCrit === 0 && initialCrit > 0) {
+      console.log('   ✅ SUCCESS! Crit chance went from ' + initialCrit + '% to 0% after Resolute Technique');
       console.log('   The passive correctly sets crit to 0%');
     } else {
-      console.log(`   ⚠️  FAILED: Expected 0%, got ${finalCrit}%`);
-      console.log('   Something went wrong with the passive allocation');
+      console.log(`   ⚠️  FAILED: Expected crit to go from ${initialCrit}% to 0%, got ${finalCrit}%`);
     }
 
     console.log('\n' + '='.repeat(50));
     console.log('TEST 2: Chaos Inoculation');
     console.log('='.repeat(50) + '\n');
 
-    // 7. Reload build for second test
-    console.log('7. Reloading test build for Chaos Inoculation test...');
-    await runtime.loadBuildFromXML(buildXML, 'CI Test Build');
-    console.log('   ✓ Build reloaded\n');
+    // 7. Create fresh build for CI test
+    console.log('7. Creating fresh build for Chaos Inoculation test...');
+    await runtime.newBuild();
+    console.log('   ✓ Fresh build created\n');
 
     // 8. Get initial Life
     console.log('8. Getting initial Life...');
-    console.log('   Calculating build stats...');
     stats = await runtime.getBuildStats();
     const initialLife = stats['Life'] || 0;
     console.log(`   ✓ Stats calculated`);
@@ -101,14 +90,11 @@ async function main() {
 
     // 9. Allocate Chaos Inoculation
     console.log('9. Allocating Chaos Inoculation passive...');
-    console.log('   Searching for passive node...');
     await runtime.allocatePassive('Chaos Inoculation');
-    console.log('   ✓ Passive node allocated');
-    console.log('   Build will auto-recalculate with new passive\n');
+    console.log('   ✓ Passive node allocated\n');
 
     // 10. Get final Life
     console.log('10. Getting final Life after passive allocation...');
-    console.log('    Recalculating build stats...');
     stats = await runtime.getBuildStats();
     const finalLife = stats['Life'] || 0;
     const finalES = stats['EnergyShield'] || 0;
@@ -119,12 +105,11 @@ async function main() {
     // 11. Verification
     console.log('11. Verification...');
     if (finalLife === 1) {
-      console.log('    ✅ SUCCESS! Life is 1 after Chaos Inoculation');
+      console.log('    ✅ SUCCESS! Life went from ' + initialLife + ' to 1 after Chaos Inoculation');
       console.log('    The passive correctly sets max Life to 1');
       console.log('    Character is now immune to chaos damage (relies on Energy Shield)');
     } else {
-      console.log(`    ⚠️  FAILED: Expected 1, got ${finalLife}`);
-      console.log('    Something went wrong with the passive allocation');
+      console.log(`    ⚠️  FAILED: Expected Life to go from ${initialLife} to 1, got ${finalLife}`);
     }
 
     console.log('\n=== All MVP Tests Complete ===');

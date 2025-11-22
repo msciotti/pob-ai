@@ -1,5 +1,7 @@
 #!/usr/bin/env luajit
 -- PoB Bridge: Provides JSON API over stdin/stdout to HeadlessWrapper
+io.stderr:write("[DEBUG] pob-bridge.lua is loading...\n")
+io.stderr:flush()
 
 -- Get paths from arguments
 local pobPath = arg[1] or "."
@@ -69,6 +71,7 @@ function api.loadBuildFromXML(params)
   local name = params.name or "Imported Build"
 
   -- loadBuildFromXML calls SetMode which creates a fresh build, no need for newBuild()
+  -- It also calls OnFrame() internally, so no need to call it again
   loadBuildFromXML(xml, name)
 
   -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
@@ -77,9 +80,9 @@ function api.loadBuildFromXML(params)
     build = build.main.modes["BUILD"]
   end
 
-  -- Trigger OnFrame to ensure calculations are done
-  -- This is what the HeadlessWrapper does after loading
-  runCallback("OnFrame")
+  -- DON'T do any extra cleanup here - it breaks custom mods!
+  -- The build is fresh from SetMode, and HeadlessWrapper's loadBuildFromXML
+  -- already called OnFrame(). Any additional manipulation breaks the build state.
 
   return {success = true, message = "Build loaded: " .. name}
 end
@@ -263,15 +266,114 @@ function api.allocatePassive(params)
       -- Allocate the node (this will allocate all nodes along the path)
       build.spec:AllocNode(node)
 
+      -- Mark that modifiers have changed (THIS IS CRITICAL!)
+      -- This tells PoB that the modifier database needs to be rebuilt
+      build.modFlag = true
+
+      -- Mark build as needing rebuild
+      build.buildFlag = true
+
       -- Trigger OnFrame to ensure calculations are done
-      -- This matches the pattern used in loadBuildFromXML and importFromCode
       runCallback("OnFrame")
+
+      -- Collect debug info
+      local debugInfo = {
+        nodeAllocated = node.alloc or false,
+        isKeystone = node.isKeystone or false,
+        modCount = node.modList and #node.modList or 0,
+      }
+
+      -- Get modifiers text
+      if node.modList then
+        debugInfo.mods = {}
+        for i, mod in ipairs(node.modList) do
+          -- Mod objects have a 'name' field and other properties
+          local modStr = mod.name or "unknown"
+          if mod.value then
+            modStr = modStr .. " = " .. tostring(mod.value)
+          end
+          table.insert(debugInfo.mods, modStr)
+        end
+      end
+
+      -- Check keystoneMod field
+      if node.keystoneMod then
+        debugInfo.hasKeystoneMod = true
+        local ksMod = node.keystoneMod
+        debugInfo.keystoneMod = {
+          name = ksMod.name or "unknown",
+          type = ksMod.type or "unknown",
+          value = ksMod.value and tostring(ksMod.value) or "nil"
+        }
+
+        -- Check if keystone is in keystoneMap
+        if build.spec and build.spec.tree and build.spec.tree.keystoneMap then
+          local ksName = ksMod.value
+          if build.spec.tree.keystoneMap[ksName] then
+            debugInfo.keystoneInMap = true
+            local ksMapEntry = build.spec.tree.keystoneMap[ksName]
+            debugInfo.keystoneMapMods = ksMapEntry.modList and #ksMapEntry.modList or 0
+          else
+            debugInfo.keystoneInMap = false
+          end
+        end
+      else
+        debugInfo.hasKeystoneMod = false
+      end
+
+      -- Get Life after OnFrame
+      if build.calcsTab and build.calcsTab.mainOutput then
+        debugInfo.lifeAfterAlloc = build.calcsTab.mainOutput["Life"]
+        debugInfo.critAfterAlloc = build.calcsTab.mainOutput["CritChance"]
+        debugInfo.chaosInocOutput = build.calcsTab.mainOutput["ChaosInoculation"]
+      end
+
+      -- Check what's available in calcsTab
+      if build.calcsTab then
+        debugInfo.hasMainEnv = build.calcsTab.mainEnv ~= nil
+        debugInfo.hasMainOutput = build.calcsTab.mainOutput ~= nil
+
+        if build.calcsTab.mainEnv then
+          debugInfo.hasModDB = build.calcsTab.mainEnv.modDB ~= nil
+
+          -- Try to check the flags in modDB if it exists
+          if build.calcsTab.mainEnv.modDB then
+            local modDB = build.calcsTab.mainEnv.modDB
+
+            -- Check Chaos Inoculation flag
+            local ciSuccess, ciValue = pcall(function() return modDB:Flag(nil, "ChaosInoculation") end)
+            debugInfo.ciFlagCheckSuccess = ciSuccess
+            if ciSuccess then
+              debugInfo.chaosInocFlag = ciValue or false
+            else
+              debugInfo.chaosInocFlagError = tostring(ciValue)
+            end
+
+            -- Check Resolute Technique flag
+            local rtSuccess, rtValue = pcall(function() return modDB:Flag(nil, "NeverCrit") end)
+            debugInfo.rtFlagCheckSuccess = rtSuccess
+            if rtSuccess then
+              debugInfo.resoluteTechniqueFlag = rtValue or false
+            else
+              debugInfo.resoluteTechniqueFlagError = tostring(rtValue)
+            end
+          end
+        end
+      end
+
+      -- Count total allocated passives
+      local allocCount = 0
+      for nodeId, allocNode in pairs(build.spec.allocNodes) do
+        allocCount = allocCount + 1
+      end
+      debugInfo.totalAllocatedPassives = allocCount
 
       return {
         success = true,
         message = "Allocated: " .. nodeName,
         pathLength = #node.path,
-        nodesAllocated = #node.path
+        nodesAllocated = #node.path,
+        debug = debugInfo
       }
     end
   end
@@ -351,6 +453,38 @@ function api.unequipItem(params)
   end
 
   return {success = true, message = "Unequipped item from " .. slotName}
+end
+
+-- Set custom mods (for testing if custom mods work at all)
+function api.setCustomMods(params)
+  local mods = params.mods or ""
+
+  if not build or not build.configTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  io.stderr:write("[DEBUG setCustomMods] Setting custom mods to: " .. mods .. "\n")
+  build.configTab.input.customMods = mods
+  build.configTab:BuildModList()
+  io.stderr:write("[DEBUG setCustomMods] BuildModList() called\n")
+  io.stderr:flush()
+
+  -- Mark build as needing rebuild
+  build.buildFlag = true
+
+  -- Trigger OnFrame to ensure calculations are done
+  runCallback("OnFrame")
+
+  io.stderr:write("[DEBUG setCustomMods] After OnFrame, customMods = " .. tostring(build.configTab.input.customMods) .. "\n")
+  io.stderr:flush()
+
+  return {success = true, message = "Custom mods set"}
+end
+
+-- Create a new build (like PoB's tests)
+function api.newBuild(params)
+  newBuild()  -- Call HeadlessWrapper's newBuild function
+  return {success = true, message = "New build created"}
 end
 
 -- Get list of all equipped items

@@ -202,6 +202,22 @@ export class LuaJITRuntime {
       throw new Error(response.error || 'Failed to allocate passive');
     }
     console.log(response.message);
+
+    // Log debug info if available
+    if (response.debug) {
+      console.log('DEBUG INFO:', JSON.stringify(response.debug, null, 2));
+    }
+  }
+
+  /**
+   * Set custom mods (for testing)
+   */
+  async setCustomMods(mods: string): Promise<void> {
+    const response = await this.sendCommand('setCustomMods', { mods });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to set custom mods');
+    }
+    console.log(response.message);
   }
 
   /**

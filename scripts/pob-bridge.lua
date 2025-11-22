@@ -77,10 +77,9 @@ function api.loadBuildFromXML(params)
     build = build.main.modes["BUILD"]
   end
 
-  -- Trigger calculation directly
-  if build and build.calcsTab and build.calcsTab.BuildOutput then
-    build.calcsTab:BuildOutput()
-  end
+  -- Trigger OnFrame to ensure calculations are done
+  -- This is what the HeadlessWrapper does after loading
+  runCallback("OnFrame")
 
   return {success = true, message = "Build loaded: " .. name}
 end

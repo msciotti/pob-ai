@@ -1,8 +1,19 @@
 /**
  * MVP Test: Create fresh builds, allocate passives, verify stat changes
  *
- * Following PoB's own testing pattern: use newBuild() for tests that modify builds.
- * XML-loaded builds are read-only by design - modifications don't properly trigger recalculation.
+ * IMPORTANT: This test uses newBuild() to create fresh, modifiable builds.
+ *
+ * Why not load XML builds?
+ * - PoB's architecture: loadBuildFromXML() creates finalized, read-only builds
+ * - Modifications to XML-loaded builds don't trigger proper recalculation
+ * - This is by design in PoB, not a bug
+ *
+ * Evidence from PoB's own codebase:
+ * - pob-data/spec/System/TestTriggers_spec.lua uses `before_each(function() newBuild() end)`
+ * - All PoB tests that modify builds use newBuild()
+ * - loadBuildFromXML() is only used for read-only verification in TestBuilds_spec.lua
+ *
+ * See Issue #31 for discussion of making loaded builds modifiable.
  */
 import { loadConfig } from './config/index.js';
 import { getPobPath } from './pob/detector.js';

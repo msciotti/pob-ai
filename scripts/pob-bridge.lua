@@ -1,7 +1,5 @@
 #!/usr/bin/env luajit
 -- PoB Bridge: Provides JSON API over stdin/stdout to HeadlessWrapper
-io.stderr:write("[DEBUG] pob-bridge.lua is loading...\n")
-io.stderr:flush()
 
 -- Get paths from arguments
 local pobPath = arg[1] or "."
@@ -70,8 +68,8 @@ function api.loadBuildFromXML(params)
   local xml = params.xml
   local name = params.name or "Imported Build"
 
-  -- loadBuildFromXML calls SetMode which creates a fresh build, no need for newBuild()
-  -- It also calls OnFrame() internally, so no need to call it again
+  -- Load build from XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
+  -- which creates a new build instance.
   loadBuildFromXML(xml, name)
 
   -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
@@ -80,9 +78,8 @@ function api.loadBuildFromXML(params)
     build = build.main.modes["BUILD"]
   end
 
-  -- DON'T do any extra cleanup here - it breaks custom mods!
-  -- The build is fresh from SetMode, and HeadlessWrapper's loadBuildFromXML
-  -- already called OnFrame(). Any additional manipulation breaks the build state.
+  -- Trigger OnFrame to ensure calculations are complete
+  runCallback("OnFrame")
 
   return {success = true, message = "Build loaded: " .. name}
 end
@@ -97,10 +94,7 @@ function api.importFromCode(params)
   local decoded = common.base64.decode(buf)
   local xmlText = Inflate(decoded)
 
-  -- IMPORTANT: Create a fresh build first (same as loadBuildFromXML API)
-  newBuild()
-
-  -- Now load the XML
+  -- Load the decoded XML
   loadBuildFromXML(xmlText, name)
 
   -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
@@ -109,8 +103,7 @@ function api.importFromCode(params)
     build = build.main.modes["BUILD"]
   end
 
-  -- Trigger OnFrame to ensure calculations are done
-  -- This is what the HeadlessWrapper does after loading (matching loadBuildFromXML pattern)
+  -- Trigger OnFrame to ensure calculations are complete
   runCallback("OnFrame")
 
   return {success = true, message = "Build imported: " .. name}
@@ -236,6 +229,7 @@ end
 function api.allocatePassive(params)
   local nodeName = params.nodeName
   local autoPath = params.autoPath ~= false  -- Default to true
+  local debug = params.debug or false  -- Default to false
 
   if not build or not build.spec then
     return {success = false, error = "Build not initialized"}
@@ -275,6 +269,19 @@ function api.allocatePassive(params)
 
       -- Trigger OnFrame to ensure calculations are done
       runCallback("OnFrame")
+
+      -- Basic response
+      local response = {
+        success = true,
+        message = "Allocated: " .. nodeName,
+        pathLength = #node.path,
+        nodesAllocated = #node.path
+      }
+
+      -- Only include debug info if requested
+      if not debug then
+        return response
+      end
 
       -- Collect debug info
       local debugInfo = {
@@ -368,13 +375,9 @@ function api.allocatePassive(params)
       end
       debugInfo.totalAllocatedPassives = allocCount
 
-      return {
-        success = true,
-        message = "Allocated: " .. nodeName,
-        pathLength = #node.path,
-        nodesAllocated = #node.path,
-        debug = debugInfo
-      }
+      -- Attach debug info to response
+      response.debug = debugInfo
+      return response
     end
   end
 
@@ -463,20 +466,14 @@ function api.setCustomMods(params)
     return {success = false, error = "Build not initialized"}
   end
 
-  io.stderr:write("[DEBUG setCustomMods] Setting custom mods to: " .. mods .. "\n")
   build.configTab.input.customMods = mods
   build.configTab:BuildModList()
-  io.stderr:write("[DEBUG setCustomMods] BuildModList() called\n")
-  io.stderr:flush()
 
   -- Mark build as needing rebuild
   build.buildFlag = true
 
   -- Trigger OnFrame to ensure calculations are done
   runCallback("OnFrame")
-
-  io.stderr:write("[DEBUG setCustomMods] After OnFrame, customMods = " .. tostring(build.configTab.input.customMods) .. "\n")
-  io.stderr:flush()
 
   return {success = true, message = "Custom mods set"}
 end

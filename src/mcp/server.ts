@@ -229,7 +229,113 @@ export class PobMcpServer {
       }
     );
 
-    console.error('[PoB MCP] Tools registered: load_build, get_build_stats');
+    // Tool: allocate_passive
+    this.mcpServer.registerTool(
+      'allocate_passive',
+      {
+        title: 'Allocate Passive Node',
+        description: 'Allocate a passive tree node by name (e.g., "Resolute Technique")',
+        inputSchema: {
+          nodeName: z.string(),
+          autoPath: z.boolean().default(true),
+        },
+        outputSchema: {
+          success: z.boolean(),
+          message: z.string(),
+          nodeName: z.string(),
+          autoPath: z.boolean(),
+          statChanges: z.record(z.object({
+            before: z.number(),
+            after: z.number(),
+            delta: z.number(),
+          })),
+        },
+      },
+      async ({ nodeName, autoPath = true }: { nodeName: string; autoPath?: boolean }) => {
+        try {
+          // Ensure runtime is initialized
+          await this.initializeRuntime();
+
+          if (!this.runtime) {
+            throw new Error('Runtime not initialized');
+          }
+
+          // Get "before" stats
+          console.error('[PoB MCP] Getting stats before allocation...');
+          let statsBefore: Record<string, number> = {};
+
+          try {
+            statsBefore = await this.runtime.getBuildStats();
+            console.error(`[PoB MCP] Before stats: ${Object.keys(statsBefore).length} stats available`);
+          } catch (error) {
+            console.error('[PoB MCP] Warning: Could not get stats before allocation');
+          }
+
+          // Allocate the passive node
+          console.error(`[PoB MCP] Allocating passive node: ${nodeName} (autoPath: ${autoPath})`);
+          await this.runtime.allocatePassive(nodeName, autoPath);
+
+          // Get "after" stats
+          console.error('[PoB MCP] Getting stats after allocation...');
+          let statsAfter: Record<string, number> = {};
+
+          try {
+            statsAfter = await this.runtime.getBuildStats();
+            console.error(`[PoB MCP] After stats: ${Object.keys(statsAfter).length} stats available`);
+          } catch (error) {
+            console.error('[PoB MCP] Warning: Could not get stats after allocation');
+          }
+
+          // Calculate stat deltas for key stats
+          const statChanges: Record<string, { before: number; after: number; delta: number }> = {};
+
+          for (const key of KEY_BUILD_STATS) {
+            const before = statsBefore[key];
+            const after = statsAfter[key];
+
+            // Only include if both values are valid numbers
+            if (typeof before === 'number' && typeof after === 'number') {
+              statChanges[key] = {
+                before,
+                after,
+                delta: after - before,
+              };
+            }
+          }
+
+          const output = {
+            success: true,
+            message: `Passive node '${nodeName}' allocated successfully${autoPath ? ' with automatic pathing' : ''}`,
+            nodeName,
+            autoPath,
+            statChanges,
+          };
+
+          console.error('[PoB MCP] Passive node allocated successfully');
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+            structuredContent: output,
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error('[PoB MCP] Failed to allocate passive:', errorMessage);
+
+          const output = {
+            success: false,
+            error: `Failed to allocate passive node: ${errorMessage}`,
+          };
+
+          return {
+            content: [{ type: 'text', text: JSON.stringify(output, null, 2) }],
+            structuredContent: output,
+            isError: true,
+          };
+        }
+      }
+    );
+
+    console.error('[PoB MCP] Tools registered: load_build, get_build_stats, allocate_passive');
   }
 
   /**

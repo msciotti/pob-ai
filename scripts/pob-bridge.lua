@@ -68,7 +68,8 @@ function api.loadBuildFromXML(params)
   local xml = params.xml
   local name = params.name or "Imported Build"
 
-  -- loadBuildFromXML calls SetMode which creates a fresh build, no need for newBuild()
+  -- Load build from XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
+  -- which creates a new build instance.
   loadBuildFromXML(xml, name)
 
   -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
@@ -77,8 +78,7 @@ function api.loadBuildFromXML(params)
     build = build.main.modes["BUILD"]
   end
 
-  -- Trigger OnFrame to ensure calculations are done
-  -- This is what the HeadlessWrapper does after loading
+  -- Trigger OnFrame to ensure calculations are complete
   runCallback("OnFrame")
 
   return {success = true, message = "Build loaded: " .. name}
@@ -94,7 +94,7 @@ function api.importFromCode(params)
   local decoded = common.base64.decode(buf)
   local xmlText = Inflate(decoded)
 
-  -- Now load the XML
+  -- Load the decoded XML
   loadBuildFromXML(xmlText, name)
 
   -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
@@ -103,10 +103,8 @@ function api.importFromCode(params)
     build = build.main.modes["BUILD"]
   end
 
-  -- Trigger calculation directly
-  if build and build.calcsTab and build.calcsTab.BuildOutput then
-    build.calcsTab:BuildOutput()
-  end
+  -- Trigger OnFrame to ensure calculations are complete
+  runCallback("OnFrame")
 
   return {success = true, message = "Build imported: " .. name}
 end
@@ -231,6 +229,7 @@ end
 function api.allocatePassive(params)
   local nodeName = params.nodeName
   local autoPath = params.autoPath ~= false  -- Default to true
+  local debug = params.debug or false  -- Default to false
 
   if not build or not build.spec then
     return {success = false, error = "Build not initialized"}
@@ -261,17 +260,124 @@ function api.allocatePassive(params)
       -- Allocate the node (this will allocate all nodes along the path)
       build.spec:AllocNode(node)
 
-      -- Trigger recalculation directly (mainObject:OnFrame hangs in headless mode)
-      if build.calcsTab and build.calcsTab.BuildOutput then
-        build.calcsTab:BuildOutput()
-      end
+      -- Mark that modifiers have changed (THIS IS CRITICAL!)
+      -- This tells PoB that the modifier database needs to be rebuilt
+      build.modFlag = true
 
-      return {
+      -- Mark build as needing rebuild
+      build.buildFlag = true
+
+      -- Trigger OnFrame to ensure calculations are done
+      runCallback("OnFrame")
+
+      -- Basic response
+      local response = {
         success = true,
         message = "Allocated: " .. nodeName,
         pathLength = #node.path,
         nodesAllocated = #node.path
       }
+
+      -- Only include debug info if requested
+      if not debug then
+        return response
+      end
+
+      -- Collect debug info
+      local debugInfo = {
+        nodeAllocated = node.alloc or false,
+        isKeystone = node.isKeystone or false,
+        modCount = node.modList and #node.modList or 0,
+      }
+
+      -- Get modifiers text
+      if node.modList then
+        debugInfo.mods = {}
+        for i, mod in ipairs(node.modList) do
+          -- Mod objects have a 'name' field and other properties
+          local modStr = mod.name or "unknown"
+          if mod.value then
+            modStr = modStr .. " = " .. tostring(mod.value)
+          end
+          table.insert(debugInfo.mods, modStr)
+        end
+      end
+
+      -- Check keystoneMod field
+      if node.keystoneMod then
+        debugInfo.hasKeystoneMod = true
+        local ksMod = node.keystoneMod
+        debugInfo.keystoneMod = {
+          name = ksMod.name or "unknown",
+          type = ksMod.type or "unknown",
+          value = ksMod.value and tostring(ksMod.value) or "nil"
+        }
+
+        -- Check if keystone is in keystoneMap
+        if build.spec and build.spec.tree and build.spec.tree.keystoneMap then
+          local ksName = ksMod.value
+          if build.spec.tree.keystoneMap[ksName] then
+            debugInfo.keystoneInMap = true
+            local ksMapEntry = build.spec.tree.keystoneMap[ksName]
+            debugInfo.keystoneMapMods = ksMapEntry.modList and #ksMapEntry.modList or 0
+          else
+            debugInfo.keystoneInMap = false
+          end
+        end
+      else
+        debugInfo.hasKeystoneMod = false
+      end
+
+      -- Get Life after OnFrame
+      if build.calcsTab and build.calcsTab.mainOutput then
+        debugInfo.lifeAfterAlloc = build.calcsTab.mainOutput["Life"]
+        debugInfo.critAfterAlloc = build.calcsTab.mainOutput["CritChance"]
+        debugInfo.chaosInocOutput = build.calcsTab.mainOutput["ChaosInoculation"]
+      end
+
+      -- Check what's available in calcsTab
+      if build.calcsTab then
+        debugInfo.hasMainEnv = build.calcsTab.mainEnv ~= nil
+        debugInfo.hasMainOutput = build.calcsTab.mainOutput ~= nil
+
+        if build.calcsTab.mainEnv then
+          debugInfo.hasModDB = build.calcsTab.mainEnv.modDB ~= nil
+
+          -- Try to check the flags in modDB if it exists
+          if build.calcsTab.mainEnv.modDB then
+            local modDB = build.calcsTab.mainEnv.modDB
+
+            -- Check Chaos Inoculation flag
+            local ciSuccess, ciValue = pcall(function() return modDB:Flag(nil, "ChaosInoculation") end)
+            debugInfo.ciFlagCheckSuccess = ciSuccess
+            if ciSuccess then
+              debugInfo.chaosInocFlag = ciValue or false
+            else
+              debugInfo.chaosInocFlagError = tostring(ciValue)
+            end
+
+            -- Check Resolute Technique flag
+            local rtSuccess, rtValue = pcall(function() return modDB:Flag(nil, "NeverCrit") end)
+            debugInfo.rtFlagCheckSuccess = rtSuccess
+            if rtSuccess then
+              debugInfo.resoluteTechniqueFlag = rtValue or false
+            else
+              debugInfo.resoluteTechniqueFlagError = tostring(rtValue)
+            end
+          end
+        end
+      end
+
+      -- Count total allocated passives
+      local allocCount = 0
+      for nodeId, allocNode in pairs(build.spec.allocNodes) do
+        allocCount = allocCount + 1
+      end
+      debugInfo.totalAllocatedPassives = allocCount
+
+      -- Attach debug info to response
+      response.debug = debugInfo
+      return response
     end
   end
 
@@ -350,6 +456,32 @@ function api.unequipItem(params)
   end
 
   return {success = true, message = "Unequipped item from " .. slotName}
+end
+
+-- Set custom mods (for testing if custom mods work at all)
+function api.setCustomMods(params)
+  local mods = params.mods or ""
+
+  if not build or not build.configTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  build.configTab.input.customMods = mods
+  build.configTab:BuildModList()
+
+  -- Mark build as needing rebuild
+  build.buildFlag = true
+
+  -- Trigger OnFrame to ensure calculations are done
+  runCallback("OnFrame")
+
+  return {success = true, message = "Custom mods set"}
+end
+
+-- Create a new build (like PoB's tests)
+function api.newBuild(params)
+  newBuild()  -- Call HeadlessWrapper's newBuild function
+  return {success = true, message = "New build created"}
 end
 
 -- Get list of all equipped items

@@ -179,16 +179,14 @@ export class PobMcpServer {
       {
         title: 'Get Build Stats',
         description: 'Get all calculated stats for the current build',
-        inputSchema: {
-          categories: z.array(z.string()).optional().default(['all']),
-        },
+        inputSchema: {},
         outputSchema: {
           success: z.boolean(),
           stats: z.record(z.number()),
           statCount: z.number(),
         },
       },
-      async ({ categories = ['all'] }: { categories?: string[] }) => {
+      async () => {
         try {
           // Ensure runtime is initialized
           await this.initializeRuntime();

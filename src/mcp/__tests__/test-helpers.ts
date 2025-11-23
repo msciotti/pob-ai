@@ -103,6 +103,7 @@ export async function createTestClient(): Promise<{
 
 /**
  * Helper to call a tool and get the result
+ * Throws an error if the tool call returns an error response
  */
 export async function callTool(
   client: Client,
@@ -113,6 +114,12 @@ export async function callTool(
     name: toolName,
     arguments: args,
   });
+
+  // Throw if the result is an error to match test expectations
+  if (result.isError) {
+    const errorText = result.content?.[0]?.text || 'Tool call failed';
+    throw new Error(errorText);
+  }
 
   return result;
 }

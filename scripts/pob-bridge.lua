@@ -59,6 +59,240 @@ io.flush()
 -- API functions
 local api = {}
 
+-- Convert a loaded build (read-only) to a modifiable build
+-- This is necessary because loadBuildFromXML/importFromCode create read-only builds
+-- Following PoB's test pattern: always use newBuild() for modifiable builds
+local function convertToModifiableBuild()
+  if not build then
+    return {success = false, error = "No build to convert"}
+  end
+
+  -- Extract all build state before creating new build
+  local state = {
+    characterLevel = build.characterLevel,
+    targetVersion = build.targetVersion,
+    bandit = build.bandit,
+    pantheonMajorGod = build.pantheonMajorGod,
+    pantheonMinorGod = build.pantheonMinorGod,
+  }
+
+  -- Extract character class and ascendancy
+  if build.spec then
+    state.className = build.spec.curClassName
+    state.ascendClassName = build.spec.curAscendClassName
+    state.classId = build.spec.curClassId
+    state.ascendClassId = build.spec.curAscendClassId
+
+    -- Extract allocated passives (node IDs)
+    state.allocatedNodes = {}
+    for nodeId, node in pairs(build.spec.allocNodes) do
+      table.insert(state.allocatedNodes, nodeId)
+    end
+
+    -- Extract jewels
+    state.jewels = {}
+    for nodeId, itemId in pairs(build.spec.jewels) do
+      if itemId and itemId > 0 then
+        state.jewels[nodeId] = itemId
+      end
+    end
+  end
+
+  -- Extract items (we'll re-add them after creating new build)
+  state.items = {}
+  if build.itemsTab and build.itemsTab.items then
+    for _, item in ipairs(build.itemsTab.items) do
+      if item and item.raw then
+        table.insert(state.items, {
+          raw = item.raw,
+          id = item.id
+        })
+      end
+    end
+  end
+
+  -- Extract active item set
+  state.equippedItems = {}
+  if build.itemsTab and build.itemsTab.activeItemSet then
+    for slotName, slot in pairs(build.itemsTab.activeItemSet) do
+      if type(slot) == "table" and slot.selItemId and slot.selItemId > 0 then
+        state.equippedItems[slotName] = slot.selItemId
+      end
+    end
+  end
+
+  -- Extract socket groups
+  state.socketGroups = {}
+  if build.skillsTab and build.skillsTab.socketGroupList then
+    for i, group in ipairs(build.skillsTab.socketGroupList) do
+      local groupCopy = {
+        enabled = group.enabled,
+        label = group.label,
+        slot = group.slot,
+        gemList = {}
+      }
+
+      for j, gem in ipairs(group.gemList) do
+        table.insert(groupCopy.gemList, {
+          nameSpec = gem.nameSpec,
+          level = gem.level,
+          quality = gem.quality,
+          enabled = gem.enabled
+        })
+      end
+
+      table.insert(state.socketGroups, groupCopy)
+    end
+  end
+
+  -- Extract config
+  state.config = {}
+  if build.configTab and build.configTab.configSets and build.configTab.activeConfigSetId then
+    local configSet = build.configTab.configSets[build.configTab.activeConfigSetId]
+    if configSet and configSet.input then
+      for var, value in pairs(configSet.input) do
+        state.config[var] = value
+      end
+    end
+  end
+
+  -- Create new modifiable build
+  newBuild()
+
+  -- Restore character level and version
+  if state.characterLevel then
+    build.characterLevel = state.characterLevel
+  end
+  if state.targetVersion then
+    build.targetVersion = state.targetVersion
+  end
+
+  -- Restore bandit and pantheon
+  if state.bandit then
+    build.bandit = state.bandit
+  end
+  if state.pantheonMajorGod then
+    build.pantheonMajorGod = state.pantheonMajorGod
+  end
+  if state.pantheonMinorGod then
+    build.pantheonMinorGod = state.pantheonMinorGod
+  end
+
+  -- Restore character class and ascendancy
+  if build.spec and state.classId then
+    build.spec:SelectClass(state.classId)
+    if state.ascendClassId then
+      build.spec:SelectAscendClass(state.ascendClassId)
+    end
+  end
+
+  -- Restore items
+  local itemIdMap = {}  -- Map old item IDs to new item IDs
+  if build.itemsTab and state.items then
+    for _, itemData in ipairs(state.items) do
+      local newItem = new("Item", itemData.raw)
+      if newItem and newItem.base then
+        build.itemsTab:AddItem(newItem, true)  -- true = no auto-equip
+        itemIdMap[itemData.id] = newItem.id
+      end
+    end
+  end
+
+  -- Restore equipped items
+  if build.itemsTab and state.equippedItems then
+    for slotName, oldItemId in pairs(state.equippedItems) do
+      local newItemId = itemIdMap[oldItemId]
+      if newItemId and build.itemsTab.slots[slotName] then
+        build.itemsTab.slots[slotName]:SetSelItemId(newItemId)
+      end
+    end
+  end
+
+  -- Restore socket groups
+  if build.skillsTab and state.socketGroups then
+    for _, groupData in ipairs(state.socketGroups) do
+      local socketGroup = {
+        enabled = groupData.enabled,
+        label = groupData.label,
+        slot = groupData.slot,
+        includeInFullDPS = false,
+        groupCount = 1,
+        mainActiveSkill = 1,
+        mainActiveSkillCalcs = 1,
+        gemList = {}
+      }
+
+      for _, gemData in ipairs(groupData.gemList) do
+        table.insert(socketGroup.gemList, {
+          nameSpec = gemData.nameSpec,
+          level = gemData.level,
+          quality = gemData.quality,
+          enabled = gemData.enabled,
+          enableGlobal1 = true,
+          enableGlobal2 = false,
+          count = 1
+        })
+      end
+
+      build.skillsTab:ProcessSocketGroup(socketGroup)
+
+      -- Ensure skill sets are initialized
+      if not build.skillsTab.activeSkillSetId or build.skillsTab.activeSkillSetId == 0 then
+        build.skillsTab:SetActiveSkillSet(1)
+      end
+
+      local activeSkillSet = build.skillsTab.skillSets[build.skillsTab.activeSkillSetId]
+      if activeSkillSet then
+        build.skillsTab.activeSkillSet = activeSkillSet
+        table.insert(activeSkillSet.socketGroupList, socketGroup)
+        build.skillsTab.socketGroupList = activeSkillSet.socketGroupList
+      end
+    end
+  end
+
+  -- Restore allocated passives
+  if build.spec and state.allocatedNodes then
+    for _, nodeId in ipairs(state.allocatedNodes) do
+      local node = build.spec.nodes[nodeId]
+      if node and not node.alloc then
+        -- Rebuild paths before allocation
+        build.spec:BuildAllDependsAndPaths()
+        -- Allocate the node
+        build.spec:AllocNode(node)
+      end
+    end
+  end
+
+  -- Restore jewels
+  if build.spec and state.jewels then
+    for nodeId, oldItemId in pairs(state.jewels) do
+      local newItemId = itemIdMap[oldItemId]
+      if newItemId then
+        build.spec.jewels[nodeId] = newItemId
+      end
+    end
+  end
+
+  -- Restore config
+  if build.configTab and state.config then
+    local configSet = build.configTab.configSets[build.configTab.activeConfigSetId]
+    if configSet then
+      for var, value in pairs(state.config) do
+        configSet.input[var] = value
+      end
+    end
+  end
+
+  -- Mark build as needing rebuild
+  build.modFlag = true
+  build.buildFlag = true
+
+  -- Trigger OnFrame to ensure calculations are complete
+  runCallback("OnFrame")
+
+  return {success = true}
+end
+
 function api.newBuild()
   newBuild()
   return {success = true, message = "Build created"}
@@ -81,7 +315,13 @@ function api.loadBuildFromXML(params)
   -- Trigger OnFrame to ensure calculations are complete
   runCallback("OnFrame")
 
-  return {success = true, message = "Build loaded: " .. name}
+  -- Convert to modifiable build (following PoB's test pattern)
+  local convertResult = convertToModifiableBuild()
+  if not convertResult.success then
+    return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
+  end
+
+  return {success = true, message = "Build loaded and made modifiable: " .. name}
 end
 
 function api.importFromCode(params)
@@ -106,7 +346,13 @@ function api.importFromCode(params)
   -- Trigger OnFrame to ensure calculations are complete
   runCallback("OnFrame")
 
-  return {success = true, message = "Build imported: " .. name}
+  -- Convert to modifiable build (following PoB's test pattern)
+  local convertResult = convertToModifiableBuild()
+  if not convertResult.success then
+    return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
+  end
+
+  return {success = true, message = "Build imported and made modifiable: " .. name}
 end
 
 function api.getStats()

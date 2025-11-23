@@ -11,7 +11,7 @@ import { PobMcpServer } from '../server.js';
  * Simple in-memory transport implementation for testing
  * Creates a pair of linked transports that communicate directly
  */
-class InMemoryTransport implements Transport {
+export class InMemoryTransport implements Transport {
   private peer: InMemoryTransport | null = null;
   public onmessage?: (message: JSONRPCMessage) => void;
   public onclose?: () => void;

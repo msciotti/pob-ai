@@ -67,7 +67,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBe(true);
-      const errorText = result.content[0]?.text || '';
+      const errorText = (result.content as any)[0]?.text || '';
       expect(errorText).toContain('Invalid pastebin code format');
       expect(errorText).toContain('8 alphanumeric characters');
     });
@@ -82,7 +82,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBe(true);
-      const errorText = result.content[0]?.text || '';
+      const errorText = (result.content as any)[0]?.text || '';
       expect(errorText).toContain('Invalid pastebin code format');
     });
 
@@ -96,7 +96,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBe(true);
-      const errorText = result.content[0]?.text || '';
+      const errorText = (result.content as any)[0]?.text || '';
       expect(errorText).toContain('Invalid pastebin code format');
     });
 
@@ -110,7 +110,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBe(true);
-      const errorText = result.content[0]?.text || '';
+      const errorText = (result.content as any)[0]?.text || '';
       expect(errorText).toContain('Invalid pastebin code format');
     });
 
@@ -124,7 +124,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBe(true);
-      const errorText = result.content[0]?.text || '';
+      const errorText = (result.content as any)[0]?.text || '';
       expect(errorText).toContain('Invalid pastebin code format');
     });
 
@@ -138,7 +138,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBe(true);
-      const errorText = result.content[0]?.text || '';
+      const errorText = (result.content as any)[0]?.text || '';
       expect(errorText).toContain('Invalid pastebin code format');
     });
   });
@@ -164,7 +164,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
       expect(output.autoPath).toBe(true);
     });
 
@@ -178,7 +178,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
       expect(output.autoPath).toBe(true);
       expect(output.message).toContain('with automatic pathing');
     });
@@ -193,7 +193,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
       expect(output.autoPath).toBe(false);
       expect(output.message).not.toContain('with automatic pathing');
     });
@@ -210,7 +210,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
 
       expect(output).toHaveProperty('success');
       expect(output).toHaveProperty('message');
@@ -235,7 +235,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBe(true);
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
 
       expect(output).toHaveProperty('success', false);
       expect(output).toHaveProperty('error');
@@ -258,7 +258,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
 
       expect(output).toHaveProperty('success');
       expect(output).toHaveProperty('stats');
@@ -288,7 +288,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
 
       expect(output).toHaveProperty('success');
       expect(output).toHaveProperty('message');
@@ -322,7 +322,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
       const statChanges = output.statChanges;
 
       // Each stat change should have before, after, and delta
@@ -353,7 +353,7 @@ describe('Schema Validation', () => {
       });
 
       expect(result.isError).toBe(true);
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
 
       expect(output).toHaveProperty('success', false);
       expect(output).toHaveProperty('error');
@@ -369,7 +369,7 @@ describe('Schema Validation', () => {
         },
       });
 
-      const errorText = result.content[0]?.text || '';
+      const errorText = (result.content as any)[0]?.text || '';
       expect(errorText).not.toContain('at ');
       expect(errorText).not.toContain('.js:');
       expect(errorText).not.toContain('.ts:');
@@ -384,7 +384,7 @@ describe('Schema Validation', () => {
         },
       });
 
-      const output = JSON.parse(result.content[0]?.text || '{}');
+      const output = JSON.parse((result.content as any)[0]?.text || '{}');
       expect(output.error).toContain('Invalid pastebin code format');
       expect(output.error).toContain('8 alphanumeric characters');
       expect(output.error).toContain('uCLE0msa');

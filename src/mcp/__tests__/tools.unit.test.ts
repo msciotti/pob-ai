@@ -59,9 +59,9 @@ describe('Tool Handlers', () => {
 
       expect(result.isError).toBeUndefined();
       expect(result.content).toBeDefined();
-      expect(result.content[0]).toHaveProperty('type', 'text');
+      expect((result.content as any)[0]).toHaveProperty('type', 'text');
 
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(response.success).toBe(true);
@@ -81,7 +81,7 @@ describe('Tool Handlers', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(response.success).toBe(true);
@@ -98,11 +98,8 @@ describe('Tool Handlers', () => {
       });
 
       expect(result.isError).toBe(true);
-      const responseText = (result.content[0] as any).text;
-      const response = JSON.parse(responseText);
-
-      expect(response.success).toBe(false);
-      expect(response.error).toContain('Invalid pastebin code format');
+      const errorText = (result.content as any)[0]?.text || '';
+      expect(errorText).toContain('Invalid pastebin code format');
     });
 
     it('should handle import failures gracefully', async () => {
@@ -116,11 +113,9 @@ describe('Tool Handlers', () => {
       });
 
       expect(result.isError).toBe(true);
-      const responseText = (result.content[0] as any).text;
-      const response = JSON.parse(responseText);
-
-      expect(response.success).toBe(false);
-      expect(response).toHaveProperty('error');
+      const errorText = (result.content as any)[0]?.text || '';
+      expect(errorText).toContain('error');
+      expect(errorText.length).toBeGreaterThan(0);
     });
 
     it('should extract sample stats correctly', async () => {
@@ -132,7 +127,7 @@ describe('Tool Handlers', () => {
         },
       });
 
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(response).toHaveProperty('sampleStats');
@@ -163,7 +158,7 @@ describe('Tool Handlers', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(response.success).toBe(true);
@@ -188,7 +183,7 @@ describe('Tool Handlers', () => {
         },
       });
 
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(response).toHaveProperty('statChanges');
@@ -211,7 +206,7 @@ describe('Tool Handlers', () => {
         },
       });
 
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(response.autoPath).toBe(true);
@@ -236,6 +231,10 @@ describe('Tool Handlers', () => {
 
       // Should not throw, even if stats are missing
       expect(result).toBeDefined();
+      expect(result.isError).toBeUndefined();
+      const responseText = (result.content as any)[0].text;
+      const response = JSON.parse(responseText);
+      expect(response.success).toBe(true);
     });
 
     it('should validate node name', async () => {
@@ -276,7 +275,7 @@ describe('Tool Handlers', () => {
         },
       });
 
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(response.autoPath).toBe(false);
@@ -299,7 +298,7 @@ describe('Tool Handlers', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(response.success).toBe(true);
@@ -322,7 +321,7 @@ describe('Tool Handlers', () => {
         arguments: {},
       });
 
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(typeof response.statCount).toBe('number');
@@ -343,7 +342,7 @@ describe('Tool Handlers', () => {
         arguments: {},
       });
 
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       // Should handle case where stats might be empty
@@ -373,7 +372,7 @@ describe('Tool Handlers', () => {
       });
 
       expect(result.isError).toBeUndefined();
-      const responseText = (result.content[0] as any).text;
+      const responseText = (result.content as any)[0].text;
       const response = JSON.parse(responseText);
 
       expect(response.success).toBe(true);
@@ -392,7 +391,9 @@ describe('Tool Handlers', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content).toBeDefined();
-      expect(result.content[0]).toHaveProperty('type', 'text');
+      expect((result.content as any)[0]).toHaveProperty('type', 'text');
+      const errorText = (result.content as any)[0]?.text || '';
+      expect(errorText.length).toBeGreaterThan(0);
     });
 
     it('should include descriptive error messages', async () => {
@@ -404,12 +405,10 @@ describe('Tool Handlers', () => {
         },
       });
 
-      const responseText = (result.content[0] as any).text;
-      const response = JSON.parse(responseText);
-
-      expect(response).toHaveProperty('error');
-      expect(typeof response.error).toBe('string');
-      expect(response.error.length).toBeGreaterThan(0);
+      expect(result.isError).toBe(true);
+      const errorText = (result.content as any)[0]?.text || '';
+      expect(errorText.length).toBeGreaterThan(0);
+      expect(typeof errorText).toBe('string');
     });
 
     it('should not leak stack traces to users', async () => {
@@ -421,15 +420,13 @@ describe('Tool Handlers', () => {
         },
       });
 
-      const responseText = (result.content[0] as any).text;
-      const response = JSON.parse(responseText);
+      expect(result.isError).toBe(true);
+      const errorText = (result.content as any)[0]?.text || '';
 
       // Error messages should not contain stack traces
-      if (response.error) {
-        expect(response.error).not.toContain('at ');
-        expect(response.error).not.toContain('.ts:');
-        expect(response.error).not.toContain('Error:');
-      }
+      expect(errorText).not.toContain('at ');
+      expect(errorText).not.toContain('.ts:');
+      expect(errorText).not.toContain('Error:');
     });
   });
 });

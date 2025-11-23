@@ -25,6 +25,9 @@ import { PobMcpServer } from '../server.js';
 import { createTestClient } from './test-helpers.js';
 import { VALID_PASTEBIN_CODES } from './fixtures/test-data.js';
 
+// Test constants
+const RAPID_CYCLE_COUNT = 3;
+
 describe('Server Initialization', () => {
   describe('Lazy Initialization', () => {
     it('should not create runtime until first tool call', async () => {
@@ -157,11 +160,51 @@ describe('Server Initialization', () => {
 
   describe('Error Handling', () => {
     it('should handle config loading failure', async () => {
-      // This test would require mocking a config failure
-      // For now, verify the server can be created
+      // Mock config loading to fail
+      const { loadConfig } = await import('../../config/index.js');
+      const mockLoadConfig = loadConfig as any;
+      mockLoadConfig.mockRejectedValueOnce(new Error('Config loading failed'));
+
+      // Create a new server and client
+      const { InMemoryTransport } = await import('./test-helpers.js');
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+
       const server = new PobMcpServer();
-      expect(server).toBeDefined();
+      await server.connect(serverTransport);
+
+      const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+      const client = new Client(
+        {
+          name: 'test-client',
+          version: '1.0.0',
+        },
+        {
+          capabilities: {},
+        }
+      );
+
+      await client.connect(clientTransport);
+
+      // Try to call a tool - should fail gracefully with config error
+      const result = await client.callTool({
+        name: 'load_build',
+        arguments: {
+          source: VALID_PASTEBIN_CODES.sample1,
+          buildName: 'Test',
+        },
+      });
+
+      // Should receive an error response
+      expect(result.isError).toBe(true);
+      const errorText = (result.content as any)[0]?.text || '';
+      expect(errorText).toContain('error');
+
+      // Clean up
+      await client.close();
       await server.close();
+
+      // Restore mock to default behavior
+      mockLoadConfig.mockResolvedValue({ pobPath: '/mock/pob' });
     });
 
     it('should propagate runtime errors correctly', async () => {
@@ -274,7 +317,7 @@ describe('Server Initialization', () => {
 
     it('should handle rapid open/close cycles', async () => {
       // Create and close multiple servers rapidly
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < RAPID_CYCLE_COUNT; i++) {
         const server = new PobMcpServer();
         await server.close();
       }

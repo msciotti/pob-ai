@@ -48,6 +48,7 @@ export class MockLuaJITRuntime {
   private initializeDelay: number;
   private shouldFailInitialize: boolean;
   private shouldFailCommands: boolean;
+  private initializationPromise: Promise<void> | null = null;
 
   constructor(pobPath: string) {
     this.pobPath = pobPath;
@@ -164,21 +165,33 @@ export class MockLuaJITRuntime {
     this.initializeDelay = 0;
     this.shouldFailInitialize = false;
     this.shouldFailCommands = false;
+    this.initializationPromise = null;
   }
 
   /**
    * LuaJITRuntime interface implementation
    */
   async initialize(): Promise<void> {
-    if (this.shouldFailInitialize) {
-      throw new Error('Mock initialization failure');
-    }
+    // If already initialized, return immediately
+    if (this.state.initialized) return;
 
-    if (this.initializeDelay > 0) {
-      await new Promise(resolve => setTimeout(resolve, this.initializeDelay));
-    }
+    // If initialization is in progress, wait for it to complete
+    if (this.initializationPromise) return this.initializationPromise;
 
-    this.state.initialized = true;
+    // Start new initialization
+    this.initializationPromise = (async () => {
+      if (this.shouldFailInitialize) {
+        throw new Error('Mock initialization failure');
+      }
+
+      if (this.initializeDelay > 0) {
+        await new Promise(resolve => setTimeout(resolve, this.initializeDelay));
+      }
+
+      this.state.initialized = true;
+    })();
+
+    return this.initializationPromise;
   }
 
   async newBuild(): Promise<void> {
@@ -196,6 +209,14 @@ export class MockLuaJITRuntime {
   async importFromCode(code: string, buildName: string = 'Imported Build'): Promise<void> {
     this.throwIfNotInitialized();
     this.throwIfCommandsShouldFail();
+
+    // Validate pastebin code format to match real implementation behavior
+    if (!/^[a-zA-Z0-9]{8}$/.test(code)) {
+      throw new Error(
+        'Invalid pastebin code format. Expected 8 alphanumeric characters (e.g., "uCLE0msa")'
+      );
+    }
+
     this.state.currentBuild = buildName;
   }
 

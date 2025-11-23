@@ -77,6 +77,15 @@ local function convertToModifiableBuild(preserveState)
   if not preserveState then
     newBuild()
     build = launch.main.modes["BUILD"]
+
+    -- Trigger initial calculations for the fresh build
+    if build.configTab and build.configTab.BuildModList then
+      build.configTab:BuildModList()
+    end
+    if build.calcsTab and build.calcsTab.BuildOutput then
+      build.calcsTab:BuildOutput()
+    end
+
     return {success = true, message = "Fresh build created"}
   end
 
@@ -756,14 +765,19 @@ function api.activateFlask(params)
   local slotControl = build.itemsTab.slots[slotName]
 
   -- Check if there's an item equipped in this slot
+  -- Note: In Lua, 0 is truthy, so we need to check both nil and 0
   if not slotControl.selItemId or slotControl.selItemId == 0 then
     return {success = false, error = "No item equipped in " .. slotName}
   end
 
-  -- Validate that the equipped item is actually a flask
+  -- Validate that the equipped item exists and is actually a flask
   local item = build.itemsTab.items[slotControl.selItemId]
-  if not item or item.type ~= "Flask" then
-    return {success = false, error = "Item in " .. slotName .. " is not a flask"}
+  if not item then
+    return {success = false, error = "Item not found in items table for " .. slotName}
+  end
+
+  if item.type ~= "Flask" then
+    return {success = false, error = "Item in " .. slotName .. " is not a flask (type: " .. (item.type or "unknown") .. ")"}
   end
 
   -- Set the active state on the slot control itself

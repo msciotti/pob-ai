@@ -171,6 +171,8 @@ export class LuaJITRuntime {
 
   /**
    * Load build from XML
+   * @param xml - The XML string to load
+   * @param buildName - Name for the loaded build
    * @param preserveState - If false, creates a fresh build without preserving state (useful for tests)
    */
   async loadBuildFromXML(xml: string, buildName: string = 'Imported Build', preserveState: boolean = true): Promise<void> {
@@ -180,9 +182,12 @@ export class LuaJITRuntime {
 
   /**
    * Import build from pastebin code
+   * @param code - The pastebin code to import
+   * @param buildName - Name for the imported build
+   * @param preserveState - Whether to preserve existing build state (default: true)
    */
-  async importFromCode(code: string, buildName: string = 'Imported Build'): Promise<void> {
-    const response = await this.sendCommand('importFromCode', { code, name: buildName });
+  async importFromCode(code: string, buildName: string = 'Imported Build', preserveState: boolean = true): Promise<void> {
+    const response = await this.sendCommand('importFromCode', { code, name: buildName, preserveState });
     console.log(response.message);
   }
 

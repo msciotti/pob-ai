@@ -14,6 +14,10 @@
     "start:dev": "pnpm build && node dist/index.js",
     "test": "pnpm build && node dist/tests/test-runner.js",
     "test:watch": "tsc --watch & node --watch dist/tests/test-runner.js",
+    "test:mcp": "vitest run",
+    "test:mcp:watch": "vitest",
+    "test:mcp:coverage": "vitest run --coverage",
+    "test:all": "pnpm test:mcp && pnpm test",
     "mvp": "pnpm build && node dist/mvp-test.js",
     "postinstall": "node scripts/download-pob.js && node scripts/download-luajit.js"
   },
@@ -31,9 +35,11 @@
   "devDependencies": {
     "@types/express": "^5.0.5",
     "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "^4.0.13",
     "eslint": "^9.39.1",
     "prettier": "^3.6.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.22.0",

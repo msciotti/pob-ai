@@ -5,6 +5,7 @@ pob-data/
 .DS_Store
 .env
 .env.local
+coverage/
 
 # Claude Code local settings
 .claude/settings.local.json

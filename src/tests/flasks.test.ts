@@ -156,5 +156,87 @@ Requires Level 8`;
         console.log(`   ✓ Armour with flask: ${armourWith}, after removal: ${armourWithout}`);
       },
     },
+
+    {
+      name: 'Deactivating flask removes its effects',
+      run: async (runtime) => {
+        await loadTestBuild(runtime);
+
+        // Equip some armour first
+        const ARMOUR_ITEM = `Rarity: NORMAL
+Plate Vest
+Armour: 100
+Requires Level 8`;
+        await runtime.equipItem(ARMOUR_ITEM, 'Body Armour');
+
+        // Equip and activate granite flask
+        await runtime.equipItem(GRANITE_FLASK, 'Flask 1');
+        await runtime.setConfig('conditionUsingFlask', true);
+        await runtime.activateFlask('Flask 1');
+
+        let stats = await runtime.getBuildStats();
+        const armourActivated = stats['Armour'] || 0;
+
+        // Deactivate the flask
+        await runtime.activateFlask('Flask 1', false);
+
+        stats = await runtime.getBuildStats();
+        const armourDeactivated = stats['Armour'] || 0;
+
+        // Armour should drop significantly after deactivation
+        if (armourDeactivated >= armourActivated - 1000) {
+          throw new Error(
+            `Expected armour to drop after deactivating flask. Activated: ${armourActivated}, Deactivated: ${armourDeactivated}`
+          );
+        }
+
+        console.log(`   ✓ Armour: ${armourActivated} (active) → ${armourDeactivated} (inactive)`);
+      },
+    },
+
+    {
+      name: 'Cannot activate non-flask item',
+      run: async (runtime) => {
+        await loadTestBuild(runtime);
+
+        // Equip a non-flask item
+        const ARMOUR_ITEM = `Rarity: NORMAL
+Plate Vest
+Armour: 100
+Requires Level 8`;
+        await runtime.equipItem(ARMOUR_ITEM, 'Body Armour');
+
+        // Try to activate the body armour as if it were a flask
+        try {
+          await runtime.activateFlask('Body Armour');
+          throw new Error('Expected activateFlask to throw error for non-flask item');
+        } catch (error: any) {
+          if (!error.message.includes('not a flask')) {
+            throw new Error(`Expected "not a flask" error, got: ${error.message}`);
+          }
+        }
+
+        console.log(`   ✓ Correctly rejected activation of non-flask item`);
+      },
+    },
+
+    {
+      name: 'Cannot activate empty flask slot',
+      run: async (runtime) => {
+        await loadTestBuild(runtime);
+
+        // Try to activate an empty flask slot
+        try {
+          await runtime.activateFlask('Flask 1');
+          throw new Error('Expected activateFlask to throw error for empty slot');
+        } catch (error: any) {
+          if (!error.message.includes('No item equipped')) {
+            throw new Error(`Expected "No item equipped" error, got: ${error.message}`);
+          }
+        }
+
+        console.log(`   ✓ Correctly rejected activation of empty flask slot`);
+      },
+    },
   ],
 };

@@ -342,6 +342,10 @@ end
 function api.importFromCode(params)
   local code = params.code
   local name = params.name or "Imported Build"
+  local preserveState = params.preserveState
+  if preserveState == nil then
+    preserveState = true  -- Default to preserving state for backward compatibility
+  end
 
   -- Decode pastebin code: reverse URL-safe encoding, base64 decode, then inflate
   -- Based on ImportTab.lua:294
@@ -355,7 +359,7 @@ function api.importFromCode(params)
   loadBuildFromXML(xmlText, name)
 
   -- Convert to modifiable build (following PoB's test pattern)
-  local convertResult = convertToModifiableBuild()
+  local convertResult = convertToModifiableBuild(preserveState)
   if not convertResult.success then
     return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
   end
@@ -754,6 +758,12 @@ function api.activateFlask(params)
   -- Check if there's an item equipped in this slot
   if not slotControl.selItemId or slotControl.selItemId == 0 then
     return {success = false, error = "No item equipped in " .. slotName}
+  end
+
+  -- Validate that the equipped item is actually a flask
+  local item = build.itemsTab.items[slotControl.selItemId]
+  if not item or item.type ~= "Flask" then
+    return {success = false, error = "Item in " .. slotName .. " is not a flask"}
   end
 
   -- Set the active state on the slot control itself

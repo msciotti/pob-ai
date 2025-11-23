@@ -62,9 +62,22 @@ local api = {}
 -- Convert a loaded build (read-only) to a modifiable build
 -- This is necessary because loadBuildFromXML/importFromCode create read-only builds
 -- Following PoB's test pattern: always use newBuild() for modifiable builds
-local function convertToModifiableBuild()
+-- @param preserveState: if false, create a fresh build without preserving any state
+local function convertToModifiableBuild(preserveState)
   if not build then
     return {success = false, error = "No build to convert"}
+  end
+
+  -- Default to preserving state for backward compatibility
+  if preserveState == nil then
+    preserveState = true
+  end
+
+  -- If not preserving state, just create a fresh build
+  if not preserveState then
+    newBuild()
+    build = launch.main.modes["BUILD"]
+    return {success = true, message = "Fresh build created"}
   end
 
   -- Extract all build state before creating new build
@@ -160,10 +173,10 @@ local function convertToModifiableBuild()
   newBuild()
 
   -- CRITICAL: Update global build reference after newBuild()
-  -- newBuild() calls SetMode which creates a new BUILD mode in mainObject.main.modes["BUILD"],
+  -- newBuild() calls SetMode which creates a new BUILD mode in launch.main.modes["BUILD"],
   -- but doesn't update the global 'build' variable. We MUST refresh it.
-  -- mainObject is a global set by HeadlessWrapper during initialization.
-  build = mainObject.main.modes["BUILD"]
+  -- 'launch' is a global set by Launch.lua and is the main application object.
+  build = launch.main.modes["BUILD"]
 
   -- Restore character level and version
   if state.characterLevel then
@@ -307,22 +320,18 @@ end
 function api.loadBuildFromXML(params)
   local xml = params.xml
   local name = params.name or "Imported Build"
+  local preserveState = params.preserveState
+  if preserveState == nil then
+    preserveState = true  -- Default to preserving state
+  end
 
   -- Load build from XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
-  -- which creates a new build instance.
+  -- and OnFrame(), which creates and initializes a new build instance.
+  -- The global 'build' variable is already set by HeadlessWrapper.
   loadBuildFromXML(xml, name)
 
-  -- CRITICAL: SetMode creates a new build instance in mainObject.main.modes["BUILD"],
-  -- but HeadlessWrapper's global 'build' variable doesn't get updated automatically.
-  -- We MUST refresh it to get the newly created build instance.
-  -- mainObject is a global set by HeadlessWrapper during initialization.
-  build = mainObject.main.modes["BUILD"]
-
-  -- Trigger OnFrame to ensure calculations are complete
-  runCallback("OnFrame")
-
   -- Convert to modifiable build (following PoB's test pattern)
-  local convertResult = convertToModifiableBuild()
+  local convertResult = convertToModifiableBuild(preserveState)
   if not convertResult.success then
     return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
   end
@@ -340,17 +349,10 @@ function api.importFromCode(params)
   local decoded = common.base64.decode(buf)
   local xmlText = Inflate(decoded)
 
-  -- Load the decoded XML
+  -- Load the decoded XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
+  -- and OnFrame(), which creates and initializes a new build instance.
+  -- The global 'build' variable is already set by HeadlessWrapper.
   loadBuildFromXML(xmlText, name)
-
-  -- CRITICAL: SetMode creates a new build instance in mainObject.main.modes["BUILD"],
-  -- but HeadlessWrapper's global 'build' variable doesn't get updated automatically.
-  -- We MUST refresh it to get the newly created build instance.
-  -- mainObject is a global set by HeadlessWrapper during initialization.
-  build = mainObject.main.modes["BUILD"]
-
-  -- Trigger OnFrame to ensure calculations are complete
-  runCallback("OnFrame")
 
   -- Convert to modifiable build (following PoB's test pattern)
   local convertResult = convertToModifiableBuild()

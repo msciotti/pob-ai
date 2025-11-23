@@ -171,9 +171,10 @@ export class LuaJITRuntime {
 
   /**
    * Load build from XML
+   * @param preserveState - If false, creates a fresh build without preserving state (useful for tests)
    */
-  async loadBuildFromXML(xml: string, buildName: string = 'Imported Build'): Promise<void> {
-    const response = await this.sendCommand('loadBuildFromXML', { xml, name: buildName });
+  async loadBuildFromXML(xml: string, buildName: string = 'Imported Build', preserveState: boolean = true): Promise<void> {
+    const response = await this.sendCommand('loadBuildFromXML', { xml, name: buildName, preserveState });
     console.log(response.message);
   }
 

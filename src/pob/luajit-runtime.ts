@@ -17,6 +17,12 @@ export class LuaJITRuntime {
   private pobPath: string;
   private rl: readline.Interface | null = null;
   private pendingResponse: ((response: any) => void) | null = null;
+  private commandQueue: Array<{
+    resolve: (response: any) => void;
+    reject: (error: Error) => void;
+    timeout: NodeJS.Timeout;
+    id: symbol;
+  }> = [];
   private luajitPath: string;
   private dkjsonPath: string;
 
@@ -95,10 +101,24 @@ export class LuaJITRuntime {
             return;
           }
 
-          // Handle API responses
-          if (this.pendingResponse) {
-            this.pendingResponse(response);
-            this.pendingResponse = null;
+          // Handle API responses - process from queue (FIFO)
+          if (this.commandQueue.length > 0) {
+            const command = this.commandQueue.shift()!;
+            clearTimeout(command.timeout);
+
+            if (response.success) {
+              command.resolve(response);
+            } else {
+              command.reject(new Error(response.error || 'Command failed'));
+            }
+          } else if (this.pendingResponse) {
+            // Fallback for legacy code paths (should not be used with queue)
+            const callback = this.pendingResponse;
+            this.pendingResponse = null;  // Clear immediately to prevent memory leak
+            callback(response);
+          } else {
+            // Unexpected response with no pending command
+            console.warn('Received response with no pending command:', response);
           }
         } catch (error) {
           // Ignore non-JSON lines (PoB prints colored error messages)
@@ -132,6 +152,7 @@ export class LuaJITRuntime {
 
   /**
    * Send command to LuaJIT process and wait for response
+   * Commands are queued and processed in FIFO order to prevent race conditions
    */
   private async sendCommand(command: string, params?: any): Promise<any> {
     if (!this.process || !this.process.stdin) {
@@ -140,24 +161,23 @@ export class LuaJITRuntime {
 
     return new Promise((resolve, reject) => {
       const request = JSON.stringify({ command, params }) + '\n';
+      const commandId = Symbol('command');
 
-      this.pendingResponse = (response) => {
-        if (response.success) {
-          resolve(response);
-        } else {
-          reject(new Error(response.error || 'Command failed'));
+      // Create timeout that will reject if command takes too long
+      const timeout = setTimeout(() => {
+        // Find and remove this command from the queue by ID
+        const index = this.commandQueue.findIndex((cmd) => cmd.id === commandId);
+        if (index !== -1) {
+          this.commandQueue.splice(index, 1);
         }
-      };
-
-      this.process!.stdin!.write(request);
-
-      // Timeout after 10 seconds
-      setTimeout(() => {
-        if (this.pendingResponse) {
-          this.pendingResponse = null;
-          reject(new Error('Command timeout'));
-        }
+        reject(new Error('Command timeout'));
       }, 10000);
+
+      // Add to queue - responses are processed FIFO
+      this.commandQueue.push({ resolve, reject, timeout, id: commandId });
+
+      // Send command to Lua process
+      this.process!.stdin!.write(request);
     });
   }
 
@@ -580,6 +600,13 @@ export class LuaJITRuntime {
    * Cleanup
    */
   destroy(): void {
+    // Clear command queue and reject pending commands
+    while (this.commandQueue.length > 0) {
+      const command = this.commandQueue.shift()!;
+      clearTimeout(command.timeout);
+      command.reject(new Error('Runtime destroyed'));
+    }
+
     if (this.process) {
       this.sendCommand('exit').catch(() => {});
       this.process.kill();

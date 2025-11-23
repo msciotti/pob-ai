@@ -58,6 +58,12 @@ export class InMemoryTransport implements Transport {
       this.peer.onclose();
     }
 
+    // Clear event handlers to prevent memory leaks
+    this.onmessage = undefined;
+    this.onclose = undefined;
+    this.onerror = undefined;
+
+    // Clear peer reference
     this.peer = null;
   }
 }
@@ -119,7 +125,12 @@ export async function callTool(
   if (result.isError) {
     // Type guard: content is always an array of ContentBlock
     const content = result.content as Array<{ type: string; text?: string }>;
-    const errorText = content[0]?.text || 'Tool call failed';
+    // Join all text blocks to avoid losing multi-block error messages
+    const errorText =
+      content
+        .map((c) => c.text)
+        .filter(Boolean)
+        .join('\n') || 'Tool call failed';
     throw new Error(errorText);
   }
 

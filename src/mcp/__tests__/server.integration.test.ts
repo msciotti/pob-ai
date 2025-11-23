@@ -211,15 +211,13 @@ describe('MCP Server Integration Tests', () => {
     });
 
     it('should not create multiple runtime instances for concurrent requests', async () => {
-      // This test verifies lazy initialization doesn't create multiple runtimes
-      // Server: Promise caching (server.ts:46) ensures single initialization
+      // This test verifies two things:
+      // 1. Lazy initialization doesn't create multiple runtimes (server.ts:46 promise caching)
+      // 2. Concurrent commands are properly queued in the runtime (luajit-runtime.ts command queue)
       //
-      // NOTE: Runtime commands should be queued to avoid race conditions
-      // Current implementation uses single pendingResponse (luajit-runtime.ts:144)
-      // which may cause issues with truly concurrent requests. This test works
-      // because calls are awaited sequentially by Promise.all (requests queue
-      // at the async boundary). Production usage should ensure commands are
-      // serialized or runtime should be fixed to use a command queue.
+      // The runtime now implements a FIFO command queue to handle concurrent requests safely.
+      // Each command is queued and responses are matched in order, preventing race conditions
+      // where concurrent requests could receive wrong responses.
       const calls = Array(10)
         .fill(null)
         .map((_, i) => callTool(client, 'load_build', { source: 'uCLE0msa', buildName: `Build ${i}` }));
@@ -234,9 +232,10 @@ describe('MCP Server Integration Tests', () => {
   });
 
   describe('Error Handling', () => {
-    it('should handle get_build_stats without loaded build', async () => {
-      // In the mocked environment, get_build_stats returns empty stats
-      // Real implementation may require a build to be loaded first
+    it('should return stats when get_build_stats is called without loaded build', async () => {
+      // Note: The mocked runtime returns default stats even without a loaded build.
+      // In production, this may behave differently and could require a build to be loaded first.
+      // This test verifies the success case with the mock implementation.
       const result = await callTool(client, 'get_build_stats', {});
       expect(result.content).toBeDefined();
       expect(result.content[0].type).toBe('text');

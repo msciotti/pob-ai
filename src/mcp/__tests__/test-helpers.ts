@@ -117,7 +117,9 @@ export async function callTool(
 
   // Throw if the result is an error to match test expectations
   if (result.isError) {
-    const errorText = result.content?.[0]?.text || 'Tool call failed';
+    // Type guard: content is always an array of ContentBlock
+    const content = result.content as Array<{ type: string; text?: string }>;
+    const errorText = content[0]?.text || 'Tool call failed';
     throw new Error(errorText);
   }
 

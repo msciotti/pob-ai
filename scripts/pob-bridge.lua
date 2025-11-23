@@ -726,6 +726,58 @@ function api.unequipItem(params)
   return {success = true, message = "Unequipped item from " .. slotName}
 end
 
+-- Activate or deactivate a flask
+function api.activateFlask(params)
+  local slotName = params.slotName  -- e.g., "Flask 1", "Flask 2", etc.
+  local active = params.active
+
+  if active == nil then
+    active = true  -- Default to activating
+  end
+
+  if not build or not build.itemsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not slotName then
+    return {success = false, error = "No slot name provided"}
+  end
+
+  -- Check if slot control exists
+  if not build.itemsTab.slots[slotName] then
+    return {success = false, error = "Invalid slot name: " .. slotName}
+  end
+
+  -- Get the slot control - this is what CalcSetup checks for slot.active
+  local slotControl = build.itemsTab.slots[slotName]
+
+  -- Check if there's an item equipped in this slot
+  if not slotControl.selItemId or slotControl.selItemId == 0 then
+    return {success = false, error = "No item equipped in " .. slotName}
+  end
+
+  -- Set the active state on the slot control itself
+  slotControl.active = active
+
+  -- Also set it on the activate control if it exists
+  if slotControl.controls and slotControl.controls.activate then
+    slotControl.controls.activate.state = active
+  end
+
+  -- Trigger build recalculation
+  if build.configTab and build.configTab.BuildModList then
+    build.configTab:BuildModList()
+  end
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {
+    success = true,
+    message = (active and "Activated" or "Deactivated") .. " flask in " .. slotName
+  }
+end
+
 -- Set custom mods (for testing if custom mods work at all)
 function api.setCustomMods(params)
   local mods = params.mods or ""

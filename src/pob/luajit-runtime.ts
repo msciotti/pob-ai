@@ -308,6 +308,19 @@ export class LuaJITRuntime {
   }
 
   /**
+   * Activate or deactivate a flask
+   * @param slotName - Flask slot name (e.g., "Flask 1", "Flask 2")
+   * @param active - true to activate, false to deactivate (default: true)
+   */
+  async activateFlask(slotName: string, active: boolean = true): Promise<void> {
+    const response = await this.sendCommand('activateFlask', { slotName, active });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to activate flask');
+    }
+    console.log(response.message);
+  }
+
+  /**
    * Get all currently equipped items
    */
   async getEquippedItems(): Promise<Array<{

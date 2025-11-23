@@ -28,12 +28,21 @@ export const flaskTests: TestSuite = {
       run: async (runtime) => {
         await loadTestBuild(runtime);
 
+        // Add a skill to enable crit chance calculations
+        await runtime.addSocketGroup('Test', [{ name: 'Fireball' }]);
+
         // Get base crit
         let stats = await runtime.getBuildStats();
         const baseCrit = stats['CritChance'] || 0;
 
         // Equip diamond flask
         await runtime.equipItem(DIAMOND_FLASK, 'Flask 1');
+
+        // Enable "using flask" condition
+        await runtime.setConfig('conditionUsingFlask', true);
+
+        // Activate the flask
+        await runtime.activateFlask('Flask 1');
 
         stats = await runtime.getBuildStats();
         const critWithFlask = stats['CritChance'] || 0;
@@ -54,11 +63,24 @@ export const flaskTests: TestSuite = {
       run: async (runtime) => {
         await loadTestBuild(runtime);
 
+        // Equip some armour first so there's something for granite flask to boost
+        const ARMOUR_ITEM = `Rarity: NORMAL
+Plate Vest
+Armour: 100
+Requires Level 8`;
+        await runtime.equipItem(ARMOUR_ITEM, 'Body Armour');
+
         let stats = await runtime.getBuildStats();
         const baseArmour = stats['Armour'] || 0;
 
         // Equip granite flask
         await runtime.equipItem(GRANITE_FLASK, 'Flask 2');
+
+        // Enable "using flask" condition
+        await runtime.setConfig('conditionUsingFlask', true);
+
+        // Activate the flask
+        await runtime.activateFlask('Flask 2');
 
         stats = await runtime.getBuildStats();
         const armourWithFlask = stats['Armour'] || 0;
@@ -99,8 +121,21 @@ export const flaskTests: TestSuite = {
       run: async (runtime) => {
         await loadTestBuild(runtime);
 
+        // Equip some armour first
+        const ARMOUR_ITEM = `Rarity: NORMAL
+Plate Vest
+Armour: 100
+Requires Level 8`;
+        await runtime.equipItem(ARMOUR_ITEM, 'Body Armour');
+
         // Equip granite flask
         await runtime.equipItem(GRANITE_FLASK, 'Flask 1');
+
+        // Enable "using flask" condition
+        await runtime.setConfig('conditionUsingFlask', true);
+
+        // Activate the flask
+        await runtime.activateFlask('Flask 1');
 
         let stats = await runtime.getBuildStats();
         const armourWith = stats['Armour'] || 0;

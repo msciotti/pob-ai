@@ -62,9 +62,31 @@ local api = {}
 -- Convert a loaded build (read-only) to a modifiable build
 -- This is necessary because loadBuildFromXML/importFromCode create read-only builds
 -- Following PoB's test pattern: always use newBuild() for modifiable builds
-local function convertToModifiableBuild()
+-- @param preserveState: if false, create a fresh build without preserving any state
+local function convertToModifiableBuild(preserveState)
   if not build then
     return {success = false, error = "No build to convert"}
+  end
+
+  -- Default to preserving state for backward compatibility
+  if preserveState == nil then
+    preserveState = true
+  end
+
+  -- If not preserving state, just create a fresh build
+  if not preserveState then
+    newBuild()
+    build = launch.main.modes["BUILD"]
+
+    -- Trigger initial calculations for the fresh build
+    if build.configTab and build.configTab.BuildModList then
+      build.configTab:BuildModList()
+    end
+    if build.calcsTab and build.calcsTab.BuildOutput then
+      build.calcsTab:BuildOutput()
+    end
+
+    return {success = true, message = "Fresh build created"}
   end
 
   -- Extract all build state before creating new build
@@ -158,6 +180,12 @@ local function convertToModifiableBuild()
 
   -- Create new modifiable build
   newBuild()
+
+  -- CRITICAL: Update global build reference after newBuild()
+  -- newBuild() calls SetMode which creates a new BUILD mode in launch.main.modes["BUILD"],
+  -- but doesn't update the global 'build' variable. We MUST refresh it.
+  -- 'launch' is a global set by Launch.lua and is the main application object.
+  build = launch.main.modes["BUILD"]
 
   -- Restore character level and version
   if state.characterLevel then
@@ -301,22 +329,18 @@ end
 function api.loadBuildFromXML(params)
   local xml = params.xml
   local name = params.name or "Imported Build"
-
-  -- Load build from XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
-  -- which creates a new build instance.
-  loadBuildFromXML(xml, name)
-
-  -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
-  -- variable doesn't get updated. We must manually refresh it to avoid stale references.
-  if build and build.main and build.main.modes then
-    build = build.main.modes["BUILD"]
+  local preserveState = params.preserveState
+  if preserveState == nil then
+    preserveState = true  -- Default to preserving state
   end
 
-  -- Trigger OnFrame to ensure calculations are complete
-  runCallback("OnFrame")
+  -- Load build from XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
+  -- and OnFrame(), which creates and initializes a new build instance.
+  -- The global 'build' variable is already set by HeadlessWrapper.
+  loadBuildFromXML(xml, name)
 
   -- Convert to modifiable build (following PoB's test pattern)
-  local convertResult = convertToModifiableBuild()
+  local convertResult = convertToModifiableBuild(preserveState)
   if not convertResult.success then
     return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
   end
@@ -327,6 +351,10 @@ end
 function api.importFromCode(params)
   local code = params.code
   local name = params.name or "Imported Build"
+  local preserveState = params.preserveState
+  if preserveState == nil then
+    preserveState = true  -- Default to preserving state for backward compatibility
+  end
 
   -- Decode pastebin code: reverse URL-safe encoding, base64 decode, then inflate
   -- Based on ImportTab.lua:294
@@ -334,20 +362,13 @@ function api.importFromCode(params)
   local decoded = common.base64.decode(buf)
   local xmlText = Inflate(decoded)
 
-  -- Load the decoded XML
+  -- Load the decoded XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
+  -- and OnFrame(), which creates and initializes a new build instance.
+  -- The global 'build' variable is already set by HeadlessWrapper.
   loadBuildFromXML(xmlText, name)
 
-  -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
-  -- variable doesn't get updated. We must manually refresh it to avoid stale references.
-  if build and build.main and build.main.modes then
-    build = build.main.modes["BUILD"]
-  end
-
-  -- Trigger OnFrame to ensure calculations are complete
-  runCallback("OnFrame")
-
   -- Convert to modifiable build (following PoB's test pattern)
-  local convertResult = convertToModifiableBuild()
+  local convertResult = convertToModifiableBuild(preserveState)
   if not convertResult.success then
     return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
   end
@@ -513,8 +534,14 @@ function api.allocatePassive(params)
       -- Mark build as needing rebuild
       build.buildFlag = true
 
-      -- Trigger OnFrame to ensure calculations are done
-      runCallback("OnFrame")
+      -- Directly trigger rebuild to ensure stats are recalculated
+      -- Must call BuildModList first, then BuildOutput
+      if build.configTab and build.configTab.BuildModList then
+        build.configTab:BuildModList()
+      end
+      if build.calcsTab and build.calcsTab.BuildOutput then
+        build.calcsTab:BuildOutput()
+      end
 
       -- Basic response
       local response = {
@@ -665,6 +692,10 @@ function api.equipItem(params)
   build.itemsTab.slots[slotName]:SetSelItemId(newItem.id)
 
   -- Trigger build recalculation
+  -- Must call BuildModList first, then BuildOutput
+  if build.configTab and build.configTab.BuildModList then
+    build.configTab:BuildModList()
+  end
   if build.calcsTab and build.calcsTab.BuildOutput then
     build.calcsTab:BuildOutput()
   end
@@ -697,11 +728,78 @@ function api.unequipItem(params)
   build.itemsTab.slots[slotName]:SetSelItemId(0)  -- 0 = no item
 
   -- Trigger build recalculation
+  -- Must call BuildModList first, then BuildOutput
+  if build.configTab and build.configTab.BuildModList then
+    build.configTab:BuildModList()
+  end
   if build.calcsTab and build.calcsTab.BuildOutput then
     build.calcsTab:BuildOutput()
   end
 
   return {success = true, message = "Unequipped item from " .. slotName}
+end
+
+-- Activate or deactivate a flask
+function api.activateFlask(params)
+  local slotName = params.slotName  -- e.g., "Flask 1", "Flask 2", etc.
+  local active = params.active
+
+  if active == nil then
+    active = true  -- Default to activating
+  end
+
+  if not build or not build.itemsTab then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  if not slotName then
+    return {success = false, error = "No slot name provided"}
+  end
+
+  -- Check if slot control exists
+  if not build.itemsTab.slots[slotName] then
+    return {success = false, error = "Invalid slot name: " .. slotName}
+  end
+
+  -- Get the slot control - this is what CalcSetup checks for slot.active
+  local slotControl = build.itemsTab.slots[slotName]
+
+  -- Check if there's an item equipped in this slot
+  -- Note: In Lua, 0 is truthy, so we need to check both nil and 0
+  if not slotControl.selItemId or slotControl.selItemId == 0 then
+    return {success = false, error = "No item equipped in " .. slotName}
+  end
+
+  -- Validate that the equipped item exists and is actually a flask
+  local item = build.itemsTab.items[slotControl.selItemId]
+  if not item then
+    return {success = false, error = "Item not found in items table for " .. slotName}
+  end
+
+  if item.type ~= "Flask" then
+    return {success = false, error = "Item in " .. slotName .. " is not a flask (type: " .. (item.type or "unknown") .. ")"}
+  end
+
+  -- Set the active state on the slot control itself
+  slotControl.active = active
+
+  -- Also set it on the activate control if it exists
+  if slotControl.controls and slotControl.controls.activate then
+    slotControl.controls.activate.state = active
+  end
+
+  -- Trigger build recalculation
+  if build.configTab and build.configTab.BuildModList then
+    build.configTab:BuildModList()
+  end
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  return {
+    success = true,
+    message = (active and "Activated" or "Deactivated") .. " flask in " .. slotName
+  }
 end
 
 -- Set custom mods (for testing if custom mods work at all)

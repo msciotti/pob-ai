@@ -171,17 +171,23 @@ export class LuaJITRuntime {
 
   /**
    * Load build from XML
+   * @param xml - The XML string to load
+   * @param buildName - Name for the loaded build
+   * @param preserveState - If false, creates a fresh build without preserving state (useful for tests)
    */
-  async loadBuildFromXML(xml: string, buildName: string = 'Imported Build'): Promise<void> {
-    const response = await this.sendCommand('loadBuildFromXML', { xml, name: buildName });
+  async loadBuildFromXML(xml: string, buildName: string = 'Imported Build', preserveState: boolean = true): Promise<void> {
+    const response = await this.sendCommand('loadBuildFromXML', { xml, name: buildName, preserveState });
     console.log(response.message);
   }
 
   /**
    * Import build from pastebin code
+   * @param code - The pastebin code to import
+   * @param buildName - Name for the imported build
+   * @param preserveState - Whether to preserve existing build state (default: true)
    */
-  async importFromCode(code: string, buildName: string = 'Imported Build'): Promise<void> {
-    const response = await this.sendCommand('importFromCode', { code, name: buildName });
+  async importFromCode(code: string, buildName: string = 'Imported Build', preserveState: boolean = true): Promise<void> {
+    const response = await this.sendCommand('importFromCode', { code, name: buildName, preserveState });
     console.log(response.message);
   }
 
@@ -302,6 +308,19 @@ export class LuaJITRuntime {
     const response = await this.sendCommand('unequipItem', { slotName });
     if (!response.success) {
       throw new Error(response.error || 'Failed to unequip item');
+    }
+    console.log(response.message);
+  }
+
+  /**
+   * Activate or deactivate a flask
+   * @param slotName - Flask slot name (e.g., "Flask 1", "Flask 2")
+   * @param active - true to activate, false to deactivate (default: true)
+   */
+  async activateFlask(slotName: string, active: boolean = true): Promise<void> {
+    const response = await this.sendCommand('activateFlask', { slotName, active });
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to activate flask');
     }
     console.log(response.message);
   }

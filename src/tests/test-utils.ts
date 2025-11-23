@@ -36,6 +36,7 @@ export async function initializeRuntime(): Promise<LuaJITRuntime> {
 
 /**
  * Load test build from file
+ * Creates a fresh build for each test to ensure isolation
  */
 export async function loadTestBuild(runtime: LuaJITRuntime): Promise<void> {
   const { readFile } = await import('fs/promises');
@@ -47,7 +48,8 @@ export async function loadTestBuild(runtime: LuaJITRuntime): Promise<void> {
 
   const buildPath = join(__dirname, '..', '..', 'test-data', 'sample-build.txt');
   const buildXML = await readFile(buildPath, 'utf-8');
-  await runtime.loadBuildFromXML(buildXML, 'Test Build');
+  // Pass false for preserveState to create a fresh build each time
+  await runtime.loadBuildFromXML(buildXML, 'Test Build', false);
 }
 
 /**

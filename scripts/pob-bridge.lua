@@ -159,6 +159,12 @@ local function convertToModifiableBuild()
   -- Create new modifiable build
   newBuild()
 
+  -- CRITICAL: Update global build reference after newBuild()
+  -- newBuild() calls SetMode which creates a new BUILD mode in mainObject.main.modes["BUILD"],
+  -- but doesn't update the global 'build' variable. We MUST refresh it.
+  -- mainObject is a global set by HeadlessWrapper during initialization.
+  build = mainObject.main.modes["BUILD"]
+
   -- Restore character level and version
   if state.characterLevel then
     build.characterLevel = state.characterLevel
@@ -306,11 +312,11 @@ function api.loadBuildFromXML(params)
   -- which creates a new build instance.
   loadBuildFromXML(xml, name)
 
-  -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
-  -- variable doesn't get updated. We must manually refresh it to avoid stale references.
-  if build and build.main and build.main.modes then
-    build = build.main.modes["BUILD"]
-  end
+  -- CRITICAL: SetMode creates a new build instance in mainObject.main.modes["BUILD"],
+  -- but HeadlessWrapper's global 'build' variable doesn't get updated automatically.
+  -- We MUST refresh it to get the newly created build instance.
+  -- mainObject is a global set by HeadlessWrapper during initialization.
+  build = mainObject.main.modes["BUILD"]
 
   -- Trigger OnFrame to ensure calculations are complete
   runCallback("OnFrame")
@@ -337,11 +343,11 @@ function api.importFromCode(params)
   -- Load the decoded XML
   loadBuildFromXML(xmlText, name)
 
-  -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
-  -- variable doesn't get updated. We must manually refresh it to avoid stale references.
-  if build and build.main and build.main.modes then
-    build = build.main.modes["BUILD"]
-  end
+  -- CRITICAL: SetMode creates a new build instance in mainObject.main.modes["BUILD"],
+  -- but HeadlessWrapper's global 'build' variable doesn't get updated automatically.
+  -- We MUST refresh it to get the newly created build instance.
+  -- mainObject is a global set by HeadlessWrapper during initialization.
+  build = mainObject.main.modes["BUILD"]
 
   -- Trigger OnFrame to ensure calculations are complete
   runCallback("OnFrame")

@@ -1,8 +1,13 @@
+import type { LuaJITRuntime } from '../../../pob/luajit-runtime.js';
+
 /**
  * MockLuaJITRuntime
  *
  * Mock implementation of LuaJITRuntime for testing MCP server functionality
  * without requiring actual LuaJIT or PoB installation.
+ *
+ * This mock provides the same public API as LuaJITRuntime, ensuring type compatibility
+ * when used in tests.
  */
 
 export interface MockRuntimeState {
@@ -33,13 +38,20 @@ export interface MockRuntimeState {
   config: Record<string, boolean | string | number>;
 }
 
+/**
+ * Mock implementation that mirrors the public API of LuaJITRuntime.
+ * Can be used as a drop-in replacement for testing.
+ */
 export class MockLuaJITRuntime {
+  private pobPath: string;
   private state: MockRuntimeState;
   private initializeDelay: number;
   private shouldFailInitialize: boolean;
   private shouldFailCommands: boolean;
 
   constructor(pobPath: string) {
+    this.pobPath = pobPath;
+
     // Initialize with default state
     this.state = {
       initialized: false,
@@ -66,30 +78,73 @@ export class MockLuaJITRuntime {
   /**
    * Test helpers - control mock behavior
    */
+
+  /**
+   * Set mock build stats for testing.
+   * @param stats - Record of stat names to values
+   */
   setStats(stats: Record<string, number>): void {
     this.state.stats = stats;
   }
 
+  /**
+   * Set mock allocated passive nodes for testing.
+   * @param nodes - Array of allocated passive nodes
+   */
   setAllocatedNodes(nodes: Array<{ id: string; name: string; type: string }>): void {
     this.state.allocatedNodes = nodes;
   }
 
+  /**
+   * Control whether initialization should fail.
+   * Useful for testing error handling during initialization.
+   * @param shouldFail - If true, initialize() will throw an error
+   */
   setShouldFailInitialize(shouldFail: boolean): void {
     this.shouldFailInitialize = shouldFail;
   }
 
+  /**
+   * Control whether all commands should fail after initialization.
+   * Useful for testing error handling in command execution.
+   * @param shouldFail - If true, all commands will throw errors
+   */
   setShouldFailCommands(shouldFail: boolean): void {
     this.shouldFailCommands = shouldFail;
   }
 
+  /**
+   * Add artificial delay to initialization for testing async behavior.
+   * @param delay - Delay in milliseconds
+   */
   setInitializeDelay(delay: number): void {
     this.initializeDelay = delay;
   }
 
+  /**
+   * Get a deep clone of the current mock state.
+   * Ensures returned state is fully immutable.
+   */
   getState(): MockRuntimeState {
-    return { ...this.state };
+    return {
+      ...this.state,
+      stats: { ...this.state.stats },
+      allocatedNodes: this.state.allocatedNodes.map(node => ({ ...node })),
+      equippedItems: this.state.equippedItems.map(item => ({ ...item })),
+      socketGroups: this.state.socketGroups.map(group => ({
+        ...group,
+        gems: group.gems.map(gem => ({ ...gem })),
+      })),
+      socketedJewels: this.state.socketedJewels.map(jewel => ({ ...jewel })),
+      pantheon: { ...this.state.pantheon },
+      config: { ...this.state.config },
+    };
   }
 
+  /**
+   * Reset the mock to its initial state.
+   * Clears all state and test configuration flags.
+   */
   reset(): void {
     this.state = {
       initialized: false,
@@ -399,16 +454,16 @@ export class MockLuaJITRuntime {
     this.state.pantheon = { major, minor };
   }
 
-  async setConfig(var_: string, value: boolean | string | number): Promise<void> {
+  async setConfig(configKey: string, value: boolean | string | number): Promise<void> {
     this.throwIfNotInitialized();
     this.throwIfCommandsShouldFail();
-    this.state.config[var_] = value;
+    this.state.config[configKey] = value;
   }
 
-  async getConfig(var_: string): Promise<boolean | string | number | null> {
+  async getConfig(configKey: string): Promise<boolean | string | number | null> {
     this.throwIfNotInitialized();
     this.throwIfCommandsShouldFail();
-    return this.state.config[var_] ?? null;
+    return this.state.config[configKey] ?? null;
   }
 
   async getAllConfig(): Promise<Record<string, boolean | string | number>> {

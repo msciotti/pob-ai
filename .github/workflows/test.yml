@@ -54,7 +54,7 @@ jobs:
 
       - name: Upload coverage reports
         uses: codecov/codecov-action@v4
-        if: always()
+        if: always() && secrets.CODECOV_TOKEN != ''
         with:
           files: ./coverage/coverage-final.json
           flags: mcp-server

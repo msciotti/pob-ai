@@ -208,6 +208,13 @@ describe('MCP Server Integration Tests', () => {
 
     it('should not create multiple runtime instances for concurrent requests', async () => {
       // This test verifies lazy initialization doesn't create multiple runtimes
+      // The server uses promise caching (server.ts:46) to ensure only one
+      // initialization happens even with concurrent requests
+      //
+      // Race condition safety:
+      // - Server: Promise caching ensures single initialization
+      // - Runtime: sendCommand uses single pendingResponse (luajit-runtime.ts:144)
+      //   ensuring commands are processed sequentially
       const calls = Array(10)
         .fill(null)
         .map((_, i) => callTool(client, 'load_build', { source: 'uCLE0msa', buildName: `Build ${i}` }));
@@ -215,6 +222,7 @@ describe('MCP Server Integration Tests', () => {
       const results = await Promise.all(calls);
 
       // All should succeed with same runtime
+      // In production, the first call initializes, others wait on same promise
       expect(results).toHaveLength(10);
       results.forEach((result) => {
         expect(result.content[0].text).toContain('loaded successfully');
@@ -223,11 +231,12 @@ describe('MCP Server Integration Tests', () => {
   });
 
   describe('Error Handling', () => {
-    it('should return proper error format for tool errors', async () => {
-      // In the mocked environment, get_build_stats returns empty stats without throwing
-      // This test verifies that the tool completes without errors
+    it('should handle get_build_stats without loaded build', async () => {
+      // In the mocked environment, get_build_stats returns empty stats
+      // Real implementation may require a build to be loaded first
       const result = await callTool(client, 'get_build_stats', {});
       expect(result.content).toBeDefined();
+      expect(result.content[0].type).toBe('text');
     });
 
     it('should handle invalid pastebin codes gracefully', async () => {
@@ -246,22 +255,22 @@ describe('MCP Server Integration Tests', () => {
     });
   });
 
-  describe('Stateless Operations', () => {
-    it('should maintain separate state per client session', async () => {
+  describe('State Management', () => {
+    it('should maintain state across tool calls within a session', async () => {
       // Load a build
       await callTool(client, 'load_build', { source: 'uCLE0msa', buildName: 'Test Build' });
 
-      // Get stats
+      // Get stats - build should be loaded
       const stats1 = await callTool(client, 'get_build_stats', {});
-
-      // Allocate passive
-      await callTool(client, 'allocate_passive', { nodeName: 'Constitution' });
-
-      // Get stats again - should reflect changes
-      const stats2 = await callTool(client, 'get_build_stats', {});
-
-      // Both calls should succeed (actual stat changes would be tested in unit tests)
       expect(stats1.content).toBeDefined();
+
+      // Allocate passive - should work on loaded build
+      const allocResult = await callTool(client, 'allocate_passive', { nodeName: 'Constitution' });
+      expect(allocResult.content).toBeDefined();
+      expect(allocResult.content[0].text).toContain('Constitution');
+
+      // Get stats again - should still work with same build
+      const stats2 = await callTool(client, 'get_build_stats', {});
       expect(stats2.content).toBeDefined();
     });
   });

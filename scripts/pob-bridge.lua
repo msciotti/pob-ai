@@ -513,8 +513,14 @@ function api.allocatePassive(params)
       -- Mark build as needing rebuild
       build.buildFlag = true
 
-      -- Trigger OnFrame to ensure calculations are done
-      runCallback("OnFrame")
+      -- Directly trigger rebuild to ensure stats are recalculated
+      -- Must call BuildModList first, then BuildOutput
+      if build.configTab and build.configTab.BuildModList then
+        build.configTab:BuildModList()
+      end
+      if build.calcsTab and build.calcsTab.BuildOutput then
+        build.calcsTab:BuildOutput()
+      end
 
       -- Basic response
       local response = {
@@ -665,6 +671,10 @@ function api.equipItem(params)
   build.itemsTab.slots[slotName]:SetSelItemId(newItem.id)
 
   -- Trigger build recalculation
+  -- Must call BuildModList first, then BuildOutput
+  if build.configTab and build.configTab.BuildModList then
+    build.configTab:BuildModList()
+  end
   if build.calcsTab and build.calcsTab.BuildOutput then
     build.calcsTab:BuildOutput()
   end
@@ -697,6 +707,10 @@ function api.unequipItem(params)
   build.itemsTab.slots[slotName]:SetSelItemId(0)  -- 0 = no item
 
   -- Trigger build recalculation
+  -- Must call BuildModList first, then BuildOutput
+  if build.configTab and build.configTab.BuildModList then
+    build.configTab:BuildModList()
+  end
   if build.calcsTab and build.calcsTab.BuildOutput then
     build.calcsTab:BuildOutput()
   end

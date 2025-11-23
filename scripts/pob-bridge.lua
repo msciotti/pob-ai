@@ -59,37 +59,6 @@ io.flush()
 -- API functions
 local api = {}
 
-function api.newBuild()
-  newBuild()
-  return {success = true, message = "Build created"}
-end
-
-function api.loadBuildFromXML(params)
-  local xml = params.xml
-  local name = params.name or "Imported Build"
-
-  -- Load build from XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
-  -- which creates a new build instance.
-  loadBuildFromXML(xml, name)
-
-  -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
-  -- variable doesn't get updated. We must manually refresh it to avoid stale references.
-  if build and build.main and build.main.modes then
-    build = build.main.modes["BUILD"]
-  end
-
-  -- Trigger OnFrame to ensure calculations are complete
-  runCallback("OnFrame")
-
-  -- Convert to modifiable build (following PoB's test pattern)
-  local convertResult = convertToModifiableBuild()
-  if not convertResult.success then
-    return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
-  end
-
-  return {success = true, message = "Build loaded and made modifiable: " .. name}
-end
-
 -- Convert a loaded build (read-only) to a modifiable build
 -- This is necessary because loadBuildFromXML/importFromCode create read-only builds
 -- Following PoB's test pattern: always use newBuild() for modifiable builds
@@ -322,6 +291,37 @@ local function convertToModifiableBuild()
   runCallback("OnFrame")
 
   return {success = true}
+end
+
+function api.newBuild()
+  newBuild()
+  return {success = true, message = "Build created"}
+end
+
+function api.loadBuildFromXML(params)
+  local xml = params.xml
+  local name = params.name or "Imported Build"
+
+  -- Load build from XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
+  -- which creates a new build instance.
+  loadBuildFromXML(xml, name)
+
+  -- IMPORTANT: SetMode creates a new build instance, but HeadlessWrapper's global 'build'
+  -- variable doesn't get updated. We must manually refresh it to avoid stale references.
+  if build and build.main and build.main.modes then
+    build = build.main.modes["BUILD"]
+  end
+
+  -- Trigger OnFrame to ensure calculations are complete
+  runCallback("OnFrame")
+
+  -- Convert to modifiable build (following PoB's test pattern)
+  local convertResult = convertToModifiableBuild()
+  if not convertResult.success then
+    return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
+  end
+
+  return {success = true, message = "Build loaded and made modifiable: " .. name}
 end
 
 function api.importFromCode(params)

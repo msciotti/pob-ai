@@ -21,6 +21,7 @@ export class LuaJITRuntime {
     resolve: (response: any) => void;
     reject: (error: Error) => void;
     timeout: NodeJS.Timeout;
+    id: symbol;
   }> = [];
   private luajitPath: string;
   private dkjsonPath: string;
@@ -111,9 +112,13 @@ export class LuaJITRuntime {
               command.reject(new Error(response.error || 'Command failed'));
             }
           } else if (this.pendingResponse) {
-            // Fallback to old behavior for backwards compatibility during initialization
-            this.pendingResponse(response);
-            this.pendingResponse = null;
+            // Fallback for legacy code paths (should not be used with queue)
+            const callback = this.pendingResponse;
+            this.pendingResponse = null;  // Clear immediately to prevent memory leak
+            callback(response);
+          } else {
+            // Unexpected response with no pending command
+            console.warn('Received response with no pending command:', response);
           }
         } catch (error) {
           // Ignore non-JSON lines (PoB prints colored error messages)
@@ -156,11 +161,12 @@ export class LuaJITRuntime {
 
     return new Promise((resolve, reject) => {
       const request = JSON.stringify({ command, params }) + '\n';
+      const commandId = Symbol('command');
 
       // Create timeout that will reject if command takes too long
       const timeout = setTimeout(() => {
-        // Find and remove this command from the queue
-        const index = this.commandQueue.findIndex((cmd) => cmd.resolve === resolve);
+        // Find and remove this command from the queue by ID
+        const index = this.commandQueue.findIndex((cmd) => cmd.id === commandId);
         if (index !== -1) {
           this.commandQueue.splice(index, 1);
         }
@@ -168,7 +174,7 @@ export class LuaJITRuntime {
       }, 10000);
 
       // Add to queue - responses are processed FIFO
-      this.commandQueue.push({ resolve, reject, timeout });
+      this.commandQueue.push({ resolve, reject, timeout, id: commandId });
 
       // Send command to Lua process
       this.process!.stdin!.write(request);

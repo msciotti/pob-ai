@@ -37,8 +37,12 @@ app.get('/health', (_req, res) => {
 // MCP endpoint — handles all MCP protocol communication
 app.post('/mcp', async (req, res) => {
   try {
-    // Create a new transport for each request to prevent request ID collisions.
-    // Different clients may use the same JSON-RPC request IDs.
+    // A new transport is created for each request. With sessionIdGenerator set to
+    // undefined the SDK operates in stateless HTTP mode: each transport is
+    // single-use and self-contained, so calling poeServer.connect() per request
+    // is the correct pattern — the MCP server re-attaches to each transport
+    // independently. This also prevents JSON-RPC request ID collisions between
+    // concurrent clients.
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
@@ -81,12 +85,12 @@ const httpServer = app.listen(PORT, () => {
 const shutdown = async (signal: string) => {
   console.error(`[poe-ai] Received ${signal}, shutting down gracefully...`);
 
-  // Stop accepting new connections
-  httpServer.close(() => {
-    console.error('[poe-ai] HTTP server closed');
-  });
+  // Stop accepting new connections and wait for all in-flight requests to finish
+  // before tearing down the MCP layer underneath them.
+  await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  console.error('[poe-ai] HTTP server closed');
 
-  // Close the MCP server
+  // Close the MCP server only after the HTTP layer is fully drained.
   try {
     await poeServer.close();
   } catch (error) {

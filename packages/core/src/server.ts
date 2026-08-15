@@ -7,7 +7,6 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { ZodType } from 'zod';
 import type { PoEPlugin, PluginContext, PluginTool } from './types.js';
 import { loadPlugins } from './plugin-loader.js';
 import { createPluginContext } from './context.js';
@@ -62,10 +61,8 @@ export class PoeAiMcpServer {
   /**
    * Register all tools contributed by the loaded plugins.
    *
-   * PluginTool.inputSchema is a ZodType which registerTool accepts as the
-   * inputSchema parameter (ZodType<object> is one of the two accepted union
-   * members alongside ZodRawShape). The callback arg type is inferred by the
-   * SDK from the schema generic, so we use a typed helper to bridge the gap.
+   * Each tool's inputSchema is explicitly parsed via Zod before dispatching to
+   * the handler, honoring the PluginTool contract defined in types.ts.
    */
   private _registerPluginTools(plugins: PoEPlugin[], ctx: PluginContext): void {
     for (const plugin of plugins) {
@@ -76,18 +73,15 @@ export class PoeAiMcpServer {
   }
 
   private _registerOneTool<TInput>(tool: PluginTool<TInput>, ctx: PluginContext): void {
-    const schema = tool.inputSchema as ZodType<object>;
-
     this.mcpServer.registerTool(
       tool.name,
-      {
-        description: tool.description,
-        inputSchema: schema,
-      },
-      (input: object) => {
-        // The MCP SDK validates the input against the schema before calling us.
-        // Cast to TInput since we know the schema has already enforced the shape.
-        return tool.handler(input as TInput, ctx);
+      { description: tool.description, inputSchema: tool.inputSchema.shape ?? tool.inputSchema },
+      async (rawInput: unknown) => {
+        // Explicitly parse via Zod to honor the PluginTool contract from types.ts:
+        // the handler must receive a fully-validated, correctly-typed TInput.
+        // This guards against SDK versions that may not validate before calling back.
+        const parsed = tool.inputSchema.parse(rawInput);
+        return tool.handler(parsed, ctx);
       },
     );
   }

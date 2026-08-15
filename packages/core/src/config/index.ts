@@ -15,15 +15,17 @@ const DEFAULTS: PoeAiConfig = {
 
 /**
  * Load configuration from ~/.config/poe-ai/config.json, merged with defaults.
- * If the file does not exist or cannot be parsed, returns the defaults silently.
+ * Missing file (ENOENT) is silently ignored. Any other error (e.g. malformed JSON,
+ * permission denied) emits a warning so the user knows their config was skipped.
  */
 export function loadConfig(): PoeAiConfig {
   try {
     const raw = readFileSync(CONFIG_PATH, 'utf8');
-    const userConfig = JSON.parse(raw) as Partial<PoeAiConfig>;
-    return { ...DEFAULTS, ...userConfig };
-  } catch {
-    // Config file missing or unreadable — use defaults
+    return { ...DEFAULTS, ...JSON.parse(raw) };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`[poe-ai] Failed to parse config at ${CONFIG_PATH}, using defaults:`, (err as Error).message);
+    }
     return { ...DEFAULTS };
   }
 }

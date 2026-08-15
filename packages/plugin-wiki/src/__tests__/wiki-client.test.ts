@@ -107,25 +107,26 @@ describe('WikiClient', () => {
       expect(httpGet).toHaveBeenCalledTimes(1);
     });
 
-    it('includes patchVersion in cache key (different patch = separate cache entry)', async () => {
-      const ctxA = makeCtx('3.26.0');
-      const ctxB = makeCtx('3.25.0');
+    it('isolates cache entries by patchVersion', async () => {
+      const sharedCache = new TtlCache();
 
-      const httpGetA = ctxA.http.get as ReturnType<typeof vi.fn>;
-      const httpGetB = ctxB.http.get as ReturnType<typeof vi.fn>;
-      httpGetA.mockResolvedValue(FAKE_SEARCH_RESPONSE);
-      httpGetB.mockResolvedValue(FAKE_SEARCH_RESPONSE);
+      const ctxV1 = makeCtx('3.25.0');
+      ctxV1.cache = sharedCache;
+      const ctxV2 = makeCtx('3.26.0');
+      ctxV2.cache = sharedCache;
 
-      // Populate ctxA's cache with patch 3.26.0 results
-      const clientA = new WikiClient(ctxA);
-      await clientA.search('fireball');
+      const mockGet = vi.fn().mockResolvedValue({ query: { search: [{ title: 'Fireball', snippet: 'A skill', pageid: 1 }] } });
+      ctxV1.http = { get: mockGet, post: vi.fn() } as any;
+      ctxV2.http = { get: mockGet, post: vi.fn() } as any;
 
-      // ctxB uses a different cache instance with a different patch — must hit HTTP
-      const clientB = new WikiClient(ctxB);
-      await clientB.search('fireball');
+      const client1 = new WikiClient(ctxV1);
+      const client2 = new WikiClient(ctxV2);
 
-      expect(httpGetA).toHaveBeenCalledTimes(1);
-      expect(httpGetB).toHaveBeenCalledTimes(1);
+      await client1.search('fireball');
+      await client2.search('fireball');
+
+      // Both should have called HTTP since they're different patch versions
+      expect(mockGet).toHaveBeenCalledTimes(2);
     });
 
     it('passes correct query params to the HTTP client', async () => {

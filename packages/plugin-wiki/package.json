@@ -19,11 +19,9 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {
-    "zod": "3"
-  },
   "peerDependencies": {
-    "@poe-ai/core": "workspace:*"
+    "@poe-ai/core": "workspace:*",
+    "zod": "3"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

@@ -6,7 +6,7 @@ import { getSkillInfoTool } from './tools/get-skill-info.js';
 
 const WikiPlugin: PoEPlugin = {
   name: '@poe-ai/plugin-wiki',
-  version: '0.1.0',
+  version: '0.1.0', // keep in sync with packages/plugin-wiki/package.json
   patchCompatibility: '*',
 
   async initialize(ctx) {

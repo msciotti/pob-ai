@@ -20,7 +20,7 @@ export class WikiClient {
   constructor(private ctx: PluginContext) {}
 
   async search(query: string): Promise<WikiSearchResult[]> {
-    const cacheKey = `wiki:search:${this.ctx.leagueState.patchVersion}:${query}`;
+    const cacheKey = `wiki:search:${this.ctx.leagueState.patchVersion}:${query.toLowerCase().trim()}`;
     const cached = this.ctx.cache.get<WikiSearchResult[]>(cacheKey);
     if (cached) return cached;
 

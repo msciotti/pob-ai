@@ -1,0 +1,32 @@
+{
+  "name": "@poe-ai/core",
+  "version": "0.1.0",
+  "description": "Core MCP server and plugin infrastructure for poe-ai",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "axios": "^1.13.2",
+    "express": "^5.1.0",
+    "zod": "3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13",
+    "@types/node": "^24.10.1",
+    "@types/express": "^5.0.5"
+  }
+}

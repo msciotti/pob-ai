@@ -15,14 +15,13 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "node dist/tests/test-runner.js",
-    "test:vitest": "vitest run",
-    "postinstall": "node scripts/download-pob.js && node scripts/download-luajit.js"
+    "test:vitest": "vitest run"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "peerDependencies": {
     "@poe-ai/core": "workspace:*"
-  },
-  "dependencies": {
-    "zod": "3"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

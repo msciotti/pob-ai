@@ -22,14 +22,17 @@ export class RateLimitedHttpClient implements HttpClient {
   }
 
   private async throttle(host: string): Promise<void> {
-    const existing = this.requestQueues.get(host) ?? Promise.resolve();
-    let resolve!: () => void;
-    const next = new Promise<void>((r) => { resolve = r; });
-    this.requestQueues.set(host, existing.then(() => {
-      resolve();
-      return new Promise<void>((r) => setTimeout(r, this.minIntervalMs));
-    }));
-    return existing.then(() => next);
+    // Chain a delay slot onto the existing queue so callers are serialized
+    // and each waits for the full minIntervalMs before proceeding.
+    const slot = (this.requestQueues.get(host) ?? Promise.resolve()).then(
+      () => new Promise<void>((r) => setTimeout(r, this.minIntervalMs)),
+    );
+    this.requestQueues.set(host, slot);
+    // Clean up the entry once this slot settles so the Map doesn't grow unboundedly.
+    slot.then(() => {
+      if (this.requestQueues.get(host) === slot) this.requestQueues.delete(host);
+    });
+    return slot;
   }
 
   async get<T = unknown>(url: string, options: HttpRequestOptions = {}): Promise<T> {

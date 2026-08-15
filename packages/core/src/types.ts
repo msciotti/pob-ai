@@ -1,4 +1,4 @@
-import type { ZodSchema } from 'zod';
+import type { ZodType } from 'zod';
 
 // Returned by every tool handler
 export interface ToolResult {
@@ -9,12 +9,14 @@ export interface ToolResult {
   isError?: boolean;
 }
 
-// A single MCP tool contributed by a plugin
-export interface PluginTool {
+// A single MCP tool contributed by a plugin.
+// The server calls inputSchema.parse(rawInput) before invoking handler,
+// so TInput is the parsed/validated type.
+export interface PluginTool<TInput = unknown> {
   name: string;
   description: string;
-  inputSchema: ZodSchema;
-  handler(input: unknown, ctx: PluginContext): Promise<ToolResult>;
+  inputSchema: ZodType<TInput>;
+  handler(input: TInput, ctx: PluginContext): Promise<ToolResult>;
 }
 
 // Current PoE league and patch info — set in user config
@@ -22,6 +24,8 @@ export interface LeagueState {
   currentLeague: string;  // e.g. "Settlers of Kalguur"
   patchVersion: string;   // e.g. "3.26.0"
   hardcore: boolean;
+  /** Solo Self-Found — affects economy tools (no trade access, different price context) */
+  ssf: boolean;
 }
 
 // Simple structured logger
@@ -63,9 +67,13 @@ export interface PobRuntime {
   destroy(): Promise<void>;
 }
 
-// Shared context passed to every plugin during initialize() and to every tool handler
+// Shared context passed to every plugin during initialize() and to every tool handler.
+// IMPORTANT: The server passes a SINGLE shared mutable object to all plugins — not a copy.
+// This means writes to ctx (e.g. ctx.pobRuntime = runtime) in one plugin's initialize()
+// are visible to all subsequent plugins and all tool handlers.
 export interface PluginContext {
-  /** Set by @poe-ai/plugin-pob during initialize(). Other plugins can use it for build calcs. */
+  /** Set by @poe-ai/plugin-pob during initialize(). Other plugins can use it for build calcs.
+   *  Always check for undefined — pobRuntime is only present if plugin-pob is loaded. */
   pobRuntime?: PobRuntime;
   /** Rate-limited HTTP client, shared across all plugins */
   http: HttpClient;

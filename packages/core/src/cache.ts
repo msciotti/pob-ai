@@ -27,9 +27,14 @@ export class TtlCache implements Cache {
 
   set<T>(key: string, value: T, ttlMs?: number): void {
     if (this.store.size >= this.maxSize) {
-      // Evict oldest entry
-      const firstKey = this.store.keys().next().value;
-      if (firstKey !== undefined) this.store.delete(firstKey);
+      // Prefer evicting an already-expired entry; fall back to FIFO (oldest insertion).
+      const now = Date.now();
+      let evictKey: string | undefined;
+      for (const [k, entry] of this.store) {
+        if (now > entry.expiresAt) { evictKey = k; break; }
+        if (evictKey === undefined) evictKey = k; // track FIFO fallback
+      }
+      if (evictKey !== undefined) this.store.delete(evictKey);
     }
     this.store.set(key, {
       value,

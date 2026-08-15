@@ -9,10 +9,10 @@ const __dirname = dirname(__filename);
 /**
  * Get bundled PoB data path.
  * At runtime this file lives at packages/plugin-pob/dist/runtime/detector.js,
- * so three levels up lands at packages/plugin-pob/, then into pob-data/src.
+ * so two levels up (__dirname/../..) lands at packages/plugin-pob/, then into pob-data/src.
  */
 function getBundledPobPath(): string {
-  return join(__dirname, '..', '..', '..', 'pob-data', 'src');
+  return join(__dirname, '..', '..', 'pob-data', 'src');
 }
 
 /**

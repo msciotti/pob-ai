@@ -1,11 +1,6 @@
 import { z } from 'zod';
 import type { PluginTool, PluginContext } from '@poe-ai/core';
-
-/**
- * Key stats to diff before/after allocation so the tool response is immediately
- * useful without needing a follow-up get_build_stats call.
- */
-const KEY_BUILD_STATS = ['Level', 'Life', 'TotalDPS', 'EnergyShield', 'Armour', 'Evasion'] as const;
+import { KEY_BUILD_STATS } from './constants.js';
 
 const inputSchema = z.object({
   nodeName: z.string().min(1, 'Node name must not be empty'),

@@ -78,6 +78,30 @@ try {
 
 console.log('⬇️  Downloading LuaJIT source...');
 
+/**
+ * Download file from URL, following redirects recursively.
+ */
+function download(url) {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, (response) => {
+        if (response.statusCode === 302 || response.statusCode === 301) {
+          // Follow redirect
+          download(response.headers.location).then(resolve).catch(reject);
+          return;
+        }
+
+        if (response.statusCode !== 200) {
+          reject(new Error(`Failed to download: ${response.statusCode}`));
+          return;
+        }
+
+        resolve(response);
+      })
+      .on('error', reject);
+  });
+}
+
 // Clean up old directory
 if (existsSync(LUAJIT_DIR)) {
   await rm(LUAJIT_DIR, { recursive: true, force: true });
@@ -86,25 +110,12 @@ if (existsSync(LUAJIT_DIR)) {
 await mkdir(LUAJIT_DIR, { recursive: true });
 
 // Download and extract
-await new Promise((resolve, reject) => {
-  https.get(LUAJIT_URL, (response) => {
-    if (response.statusCode === 302 || response.statusCode === 301) {
-      https.get(response.headers.location, (redirectResponse) => {
-        pipeline(
-          redirectResponse,
-          createGunzip(),
-          extract({ cwd: LUAJIT_DIR, strip: 1 })
-        ).then(resolve).catch(reject);
-      });
-    } else {
-      pipeline(
-        response,
-        createGunzip(),
-        extract({ cwd: LUAJIT_DIR, strip: 1 })
-      ).then(resolve).catch(reject);
-    }
-  }).on('error', reject);
-});
+const response = await download(LUAJIT_URL);
+await pipeline(
+  response,
+  createGunzip(),
+  extract({ cwd: LUAJIT_DIR, strip: 1 })
+);
 
 console.log('🔨 Building LuaJIT (this takes ~10 seconds)...');
 

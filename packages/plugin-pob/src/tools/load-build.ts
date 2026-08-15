@@ -1,11 +1,6 @@
 import { z } from 'zod';
 import type { PluginTool, PluginContext } from '@poe-ai/core';
-
-/**
- * Key build statistics to surface in the load response so the user gets
- * immediate feedback without needing a separate get_build_stats call.
- */
-const KEY_BUILD_STATS = ['Level', 'Life', 'TotalDPS', 'EnergyShield', 'Armour', 'Evasion'] as const;
+import { KEY_BUILD_STATS } from './constants.js';
 
 const inputSchema = z.object({
   source: z

@@ -11,21 +11,16 @@ const PobPlugin: PoEPlugin = {
   patchCompatibility: '*',
 
   async initialize(ctx: PluginContext): Promise<void> {
-    ctx.logger.info('[plugin-pob] Initializing PoB runtime...');
-
-    // Detect PoB installation — respects config if provided via ctx.leagueState
-    // extension point. For now we detect from the environment.
-    const pobPath = await getPobPath();
-
-    ctx.logger.info(`[plugin-pob] Using PoB at: ${pobPath}`);
-
-    const runtime = new LuaJITRuntime({ pobPath });
-    await runtime.initialize();
-
-    // Store on shared context so other plugins can use PoB calcs
-    ctx.pobRuntime = runtime;
-
-    ctx.logger.info('[plugin-pob] PoB runtime initialized successfully');
+    try {
+      const pobPath = await getPobPath();
+      const runtime = new LuaJITRuntime({ pobPath });
+      await runtime.initialize();
+      ctx.pobRuntime = runtime as any;
+      ctx.logger.info('PoB runtime initialized');
+    } catch (err) {
+      ctx.logger.error(`[@poe-ai/plugin-pob] Failed to initialize: ${(err as Error).message}`);
+      throw err;
+    }
   },
 
   tools: [loadBuildTool, getStatsTool, allocatePassiveTool],

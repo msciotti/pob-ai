@@ -315,12 +315,22 @@ export class LuaJITRuntime implements PobRuntime {
     };
   }
 
-  async getAllocatedNodes(): Promise<Array<{ id: string; name: string; type: string; isKeystone: boolean; isNotable: boolean }>> {
+  async getAllocatedNodes(): Promise<
+    Array<{ id: string; name: string; type: string; isKeystone: boolean; isNotable: boolean }>
+  > {
     const response = await this.sendCommand('getAllocatedNodes');
     if (!response['success']) {
       throw new Error((response['error'] as string) || 'Failed to get allocated nodes');
     }
-    return (response['nodes'] as Array<{ id: string; name: string; type: string; isKeystone: boolean; isNotable: boolean }>) || [];
+    return (
+      response['nodes'] as Array<{
+        id: string;
+        name: string;
+        type: string;
+        isKeystone: boolean;
+        isNotable: boolean;
+      }>
+    ) || [];
   }
 
   async getBuildMeta(): Promise<{

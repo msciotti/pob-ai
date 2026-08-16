@@ -49,6 +49,9 @@ jobs:
       - name: Run MCP tests
         run: pnpm test:mcp
 
+      - name: Run workspace tests
+        run: pnpm workspace:test
+
       - name: Run MCP tests with coverage
         run: pnpm test:mcp:coverage
 

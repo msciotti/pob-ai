@@ -8,7 +8,7 @@
     "pob-mcp": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && pnpm workspace:build",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "start:dev": "pnpm build && node dist/index.js",
@@ -19,7 +19,9 @@
     "test:mcp:coverage": "vitest run --coverage",
     "test:all": "pnpm test:mcp && pnpm test",
     "mvp": "pnpm build && node dist/mvp-test.js",
-    "postinstall": "node scripts/download-pob.js && node scripts/download-luajit.js"
+    "postinstall": "node scripts/download-pob.js && node scripts/download-luajit.js",
+    "workspace:build": "pnpm -r build",
+    "workspace:test": "pnpm -r test"
   },
   "keywords": [
     "mcp",

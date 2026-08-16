@@ -77,6 +77,22 @@ importers:
         specifier: ^4.0.13
         version: 4.0.13(@types/node@24.10.1)
 
+  packages/data-pipeline:
+    dependencies:
+      '@poe-ai/plugin-pob':
+        specifier: workspace:*
+        version: link:../plugin-pob
+    devDependencies:
+      '@poe-ai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+
   packages/plugin-ninja:
     dependencies:
       zod:

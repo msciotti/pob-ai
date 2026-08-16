@@ -1,0 +1,22 @@
+{
+  "name": "@poe-ai/data-pipeline",
+  "version": "0.1.0",
+  "description": "CLI tool to crawl Reddit via Arctic Shift and produce PoB build → community diagnosis training datasets",
+  "type": "module",
+  "bin": { "poe-data-pipeline": "./dist/index.js" },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@poe-ai/plugin-pob": "workspace:*"
+  },
+  "devDependencies": {
+    "@poe-ai/core": "workspace:*",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.0.0"
+  }
+}

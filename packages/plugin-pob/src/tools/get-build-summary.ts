@@ -112,8 +112,26 @@ export const getBuildSummaryTool: PluginTool<Input> = {
         }
       }
 
+      // Generate warnings for clearly broken conditions detectable from stats
+      const warnings: string[] = [];
+      if (typeof keyStats['HitChance'] === 'number' && keyStats['HitChance'] < 95) {
+        warnings.push(
+          `Attack hit chance is ${keyStats['HitChance'].toFixed(0)}% — attacks miss ${(100 - keyStats['HitChance']).toFixed(0)}% of the time. ` +
+            'Consider Resolute Technique (keystone) or stacking accuracy on gear.'
+        );
+      }
+      if (typeof keyStats['ChaosResist'] === 'number' && keyStats['ChaosResist'] < 0) {
+        warnings.push(
+          `Chaos resistance is ${keyStats['ChaosResist'].toFixed(0)}% — chaos damage will devastate this character.`
+        );
+      }
+      if (typeof keyStats['Life'] === 'number' && keyStats['Life'] < 3500 && !ascendancy.includes('Occultist')) {
+        warnings.push(`Life pool is ${keyStats['Life'].toFixed(0)} — below 3500 is fragile in endgame content.`);
+      }
+
       const output = {
         success: true,
+        warnings,
         characterClass,
         ascendancy,
         characterLevel: buildMeta.characterLevel,

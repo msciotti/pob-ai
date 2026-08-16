@@ -47,8 +47,8 @@ export class LuaJITRuntime implements PobRuntime {
 
     this.luajitPath = existsSync(bundledLuajit) ? bundledLuajit : 'luajit';
 
-    // Path to bundled dkjson
-    this.dkjsonPath = join(LuaJITRuntime.pluginRoot, 'pob-data', 'lua');
+    // Path to bundled dkjson (lives in pob-data/runtime/lua/ after download-pob.js extracts PoB)
+    this.dkjsonPath = join(LuaJITRuntime.pluginRoot, 'pob-data', 'runtime', 'lua');
   }
 
   /**
@@ -177,7 +177,7 @@ export class LuaJITRuntime implements PobRuntime {
           this.commandQueue.splice(index, 1);
         }
         reject(new Error('Command timeout'));
-      }, 10000);
+      }, 30000);
 
       this.commandQueue.push({
         resolve: resolve as (response: unknown) => void,
@@ -206,7 +206,7 @@ export class LuaJITRuntime implements PobRuntime {
     const response = await this.sendCommand('loadBuildFromXML', {
       xml,
       name: buildName,
-      preserveState: true,
+      preserveState: false,
     });
     console.log(response['message']);
   }
@@ -218,7 +218,7 @@ export class LuaJITRuntime implements PobRuntime {
     const response = await this.sendCommand('importFromCode', {
       code,
       name: buildName,
-      preserveState: true,
+      preserveState: false,
     });
     console.log(response['message']);
   }

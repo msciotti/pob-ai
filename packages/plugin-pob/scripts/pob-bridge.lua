@@ -50,6 +50,38 @@ print(json.encode({status = "loading", message = "Loading PoB..."}))
 io.flush()
 dofile(pobPath .. "/HeadlessWrapper.lua")
 
+-- Override HeadlessWrapper's Inflate stub with a real zlib implementation via LuaJIT FFI.
+-- HeadlessWrapper defines Inflate as a TODO stub returning "". PoB build codes are
+-- zlib-compressed (magic bytes 0x78 0xDA, standard zlib format), not raw deflate.
+do
+  local ffi = require("ffi")
+  local zlib_name = (package.config:sub(1,1) == "\\") and "zlib1" or "z"
+  local ok, zlib = pcall(ffi.load, zlib_name)
+  if ok then
+    ffi.cdef[[
+      typedef unsigned long uLong;
+      typedef unsigned char Bytef;
+      int uncompress(Bytef *dest, uLong *destLen, const Bytef *source, uLong sourceLen);
+    ]]
+    function Inflate(data)
+      if not data or #data == 0 then return "" end
+      local src = ffi.cast("const unsigned char *", data)
+      local srcLen = #data
+      -- Try with progressively larger output buffers (builds expand ~30-100x)
+      for _, mult in ipairs({60, 120, 250}) do
+        local destLen = ffi.new("unsigned long[1]", srcLen * mult)
+        local dest = ffi.new("unsigned char[?]", destLen[0])
+        if zlib.uncompress(dest, destLen, src, srcLen) == 0 then
+          return ffi.string(dest, destLen[0])
+        end
+      end
+      error("zlib uncompress failed for data of length " .. srcLen)
+    end
+  else
+    io.stderr:write("[pob-bridge] WARNING: zlib FFI unavailable — build code import disabled\n")
+  end
+end
+
 -- Initialize inputEvents as empty table for headless mode
 inputEvents = {}
 
@@ -364,16 +396,12 @@ function api.importFromCode(params)
 
   -- Load the decoded XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
   -- and OnFrame(), which creates and initializes a new build instance.
-  -- The global 'build' variable is already set by HeadlessWrapper.
   loadBuildFromXML(xmlText, name)
 
-  -- Convert to modifiable build (following PoB's test pattern)
-  local convertResult = convertToModifiableBuild(preserveState)
-  if not convertResult.success then
-    return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
-  end
+  -- Update global 'build' reference in case SetMode replaced the table.
+  build = launch.main.modes["BUILD"]
 
-  return {success = true, message = "Build imported and made modifiable: " .. name}
+  return {success = true, message = "Build imported: " .. name}
 end
 
 function api.getStats()
@@ -444,7 +472,9 @@ function api.getAllocatedNodes()
     table.insert(allocatedNodes, {
       id = node.id,
       name = node.name or "(unnamed)",
-      type = node.type
+      type = node.type,
+      isKeystone = node.isKeystone or false,
+      isNotable = node.isNotable or false,
     })
   end
 
@@ -1375,6 +1405,20 @@ function api.getConfig(params)
 
   local value = configSet.input[var]
   return {success = true, var = var, value = value}
+end
+
+-- Get build metadata: bandit choice, pantheon gods, and character level
+function api.getBuildMeta(params)
+  if not build then
+    return {success = false, error = "No build loaded"}
+  end
+  return {
+    success = true,
+    bandit = build.bandit or "None",
+    pantheonMajorGod = build.pantheonMajorGod or "None",
+    pantheonMinorGod = build.pantheonMinorGod or "None",
+    characterLevel = build.characterLevel or 1,
+  }
 end
 
 -- Get all configuration values

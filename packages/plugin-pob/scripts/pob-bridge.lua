@@ -444,7 +444,9 @@ function api.getAllocatedNodes()
     table.insert(allocatedNodes, {
       id = node.id,
       name = node.name or "(unnamed)",
-      type = node.type
+      type = node.type,
+      isKeystone = node.isKeystone or false,
+      isNotable = node.isNotable or false,
     })
   end
 
@@ -1375,6 +1377,20 @@ function api.getConfig(params)
 
   local value = configSet.input[var]
   return {success = true, var = var, value = value}
+end
+
+-- Get build meta: bandit, pantheon, and character level (convenience read command)
+function api.getBuildMeta()
+  if not build then
+    return {success = false, error = "No build loaded"}
+  end
+  return {
+    success = true,
+    bandit = build.bandit or "None",
+    pantheonMajorGod = build.pantheonMajorGod or "None",
+    pantheonMinorGod = build.pantheonMinorGod or "None",
+    characterLevel = build.characterLevel or 1
+  }
 end
 
 -- Get all configuration values

@@ -315,12 +315,30 @@ export class LuaJITRuntime implements PobRuntime {
     };
   }
 
-  async getAllocatedNodes(): Promise<Array<{ id: string; name: string; type: string }>> {
+  async getAllocatedNodes(): Promise<Array<{ id: string; name: string; type: string; isKeystone: boolean; isNotable: boolean }>> {
     const response = await this.sendCommand('getAllocatedNodes');
     if (!response['success']) {
       throw new Error((response['error'] as string) || 'Failed to get allocated nodes');
     }
-    return (response['nodes'] as Array<{ id: string; name: string; type: string }>) || [];
+    return (response['nodes'] as Array<{ id: string; name: string; type: string; isKeystone: boolean; isNotable: boolean }>) || [];
+  }
+
+  async getBuildMeta(): Promise<{
+    bandit: string;
+    pantheonMajorGod: string;
+    pantheonMinorGod: string;
+    characterLevel: number;
+  }> {
+    const response = await this.sendCommand('getBuildMeta', {});
+    if (!response['success']) {
+      throw new Error((response['error'] as string) || 'Failed to get build meta');
+    }
+    return {
+      bandit: response['bandit'] as string,
+      pantheonMajorGod: response['pantheonMajorGod'] as string,
+      pantheonMinorGod: response['pantheonMinorGod'] as string,
+      characterLevel: response['characterLevel'] as number,
+    };
   }
 
   async findPathToNode(nodeName: string): Promise<{

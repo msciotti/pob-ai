@@ -75,8 +75,10 @@ export class PoeAiMcpServer {
   private _registerOneTool<TInput>(tool: PluginTool<TInput>, ctx: PluginContext): void {
     this.mcpServer.registerTool(
       tool.name,
-      { description: tool.description, inputSchema: tool.inputSchema.shape ?? tool.inputSchema },
-      async (rawInput: unknown) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { description: tool.description, inputSchema: (tool.inputSchema as any).shape ?? tool.inputSchema },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (rawInput: unknown): Promise<any> => {
         // Explicitly parse via Zod to honor the PluginTool contract from types.ts:
         // the handler must receive a fully-validated, correctly-typed TInput.
         // This guards against SDK versions that may not validate before calling back.

@@ -7,12 +7,15 @@ const inputSchema = z.object({
   autoPath: z.boolean().default(true),
 });
 
-type Input = z.infer<typeof inputSchema>;
+// z.output uses the parsed (output) type, which correctly reflects that .default()
+// guarantees autoPath is always boolean after parsing (never undefined).
+type Input = z.output<typeof inputSchema>;
 
 export const allocatePassiveTool: PluginTool<Input> = {
   name: 'allocate_passive',
   description: 'Allocate a passive tree node by name (e.g. "Resolute Technique")',
-  inputSchema,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  inputSchema: inputSchema as any,
 
   async handler({ nodeName, autoPath = true }: Input, ctx: PluginContext) {
     if (!ctx.pobRuntime) {

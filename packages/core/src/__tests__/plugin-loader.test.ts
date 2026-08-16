@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { loadPlugins } from '../plugin-loader.js';
-import type { PoEPlugin, PluginImporter } from '../plugin-loader.js';
-import type { PluginContext } from '../types.js';
+import type { PluginImporter } from '../plugin-loader.js';
+import type { PoEPlugin, PluginContext } from '../types.js';
 import { createPluginContext } from '../context.js';
 
 // ---------------------------------------------------------------------------

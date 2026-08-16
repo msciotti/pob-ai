@@ -125,7 +125,13 @@ export const getBuildSummaryTool: PluginTool<Input> = {
           `Chaos resistance is ${keyStats['ChaosResist'].toFixed(0)}% — chaos damage will devastate this character.`
         );
       }
-      if (typeof keyStats['Life'] === 'number' && keyStats['Life'] < 3500 && !ascendancy.includes('Occultist')) {
+      const isChaosInoculation = keystones.includes('Chaos Inoculation');
+      if (
+        typeof keyStats['Life'] === 'number' &&
+        keyStats['Life'] < 3500 &&
+        !ascendancy.includes('Occultist') &&
+        !isChaosInoculation
+      ) {
         warnings.push(`Life pool is ${keyStats['Life'].toFixed(0)} — below 3500 is fragile in endgame content.`);
       }
 

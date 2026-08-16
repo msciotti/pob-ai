@@ -1434,8 +1434,13 @@ while true do
   if command == "exit" then
     break
   elseif api[command] then
-    local result = api[command](params)
-    print(json.encode(result))
+    local ok, result = pcall(api[command], params)
+    if ok then
+      print(json.encode(result))
+    else
+      -- Unhandled Lua error in handler — return error instead of crashing bridge
+      print(json.encode({success = false, error = "Internal error: " .. tostring(result)}))
+    end
   else
     print(json.encode({success = false, error = "Unknown command: " .. tostring(command)}))
   end

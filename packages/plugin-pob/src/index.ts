@@ -5,6 +5,7 @@ import { loadBuildTool } from './tools/load-build.js';
 import { getStatsTool } from './tools/get-stats.js';
 import { allocatePassiveTool } from './tools/allocate-passive.js';
 import { getBuildSummaryTool } from './tools/get-build-summary.js';
+import { compareBuildsTool } from './tools/compare-builds.js';
 
 const PobPlugin: PoEPlugin = {
   name: '@poe-ai/plugin-pob',
@@ -24,7 +25,7 @@ const PobPlugin: PoEPlugin = {
     }
   },
 
-  tools: [loadBuildTool, getStatsTool, allocatePassiveTool, getBuildSummaryTool],
+  tools: [loadBuildTool, getStatsTool, allocatePassiveTool, getBuildSummaryTool, compareBuildsTool],
 
   async dispose(ctx: PluginContext): Promise<void> {
     if (ctx.pobRuntime) {
@@ -44,3 +45,4 @@ export { loadBuildTool } from './tools/load-build.js';
 export { getStatsTool } from './tools/get-stats.js';
 export { allocatePassiveTool } from './tools/allocate-passive.js';
 export { getBuildSummaryTool } from './tools/get-build-summary.js';
+export { compareBuildsTool } from './tools/compare-builds.js';

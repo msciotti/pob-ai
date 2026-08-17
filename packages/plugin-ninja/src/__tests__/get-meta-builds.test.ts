@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { getMetaBuildsTool } from '../tools/get-meta-builds.js';
 import { TtlCache } from '@poe-ai/core';
 import type { PluginContext } from '@poe-ai/core';
@@ -12,82 +12,45 @@ function makeCtx(league = 'Standard'): PluginContext {
   } as any;
 }
 
+// The poe.ninja builds API moved in August 2026 and is not yet supported.
+// get_meta_builds always returns isError until the new API format is decoded.
 describe('get_meta_builds tool', () => {
-  it('defaults league to ctx.leagueState.currentLeague when omitted', async () => {
-    const ctx = makeCtx('Settlers of Kalguur');
-    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
-    httpGet.mockResolvedValue({ lines: [] });
-
-    await getMetaBuildsTool.handler({ skill: 'Fireball' }, ctx);
-
-    expect(httpGet).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        params: expect.objectContaining({ overview: 'Settlers of Kalguur' }),
-      })
-    );
-  });
-
-  it('uses provided league when specified', async () => {
-    const ctx = makeCtx('Standard');
-    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
-    httpGet.mockResolvedValue({ lines: [] });
-
-    await getMetaBuildsTool.handler({ skill: 'Fireball', league: 'Hardcore' }, ctx);
-
-    expect(httpGet).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        params: expect.objectContaining({ overview: 'Hardcore' }),
-      })
-    );
-  });
-
-  it('returns isError when no builds found for skill', async () => {
+  it('returns isError with a message about the unavailable API', async () => {
     const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue({ lines: [] });
 
-    const result = await getMetaBuildsTool.handler({ skill: 'ObscureSkill' }, ctx);
+    const result = await getMetaBuildsTool.handler({ skill: 'Fireball' }, ctx);
 
     expect(result.isError).toBe(true);
-    const text = result.content[0].text;
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(result.content[0].text);
     expect(parsed.success).toBe(false);
-    expect(parsed.error).toContain('ObscureSkill');
+    expect(parsed.error).toMatch(/poe\.ninja builds API/i);
   });
 
-  it('returns successful JSON text when builds are found', async () => {
+  it('does not call the HTTP client', async () => {
     const ctx = makeCtx();
-    const build = {
-      mainSkill: 'Fireball',
-      class: 'Elementalist',
-      life: 3000,
-      energyShield: 5000,
-      dps: 1_000_000,
-      activeGems: ['Fireball', 'Greater Multiple Projectiles'],
-      items: [],
-      keystonePassives: [],
-    };
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue({
-      lines: Array.from({ length: 10 }, () => build),
-    });
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
 
-    const result = await getMetaBuildsTool.handler({ skill: 'Fireball' }, ctx);
+    await getMetaBuildsTool.handler({ skill: 'Boneshatter', league: 'Standard' }, ctx);
 
-    expect(result.isError).toBeFalsy();
-    const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.sampleSize).toBe(10);
-    expect(parsed.skill).toBe('Fireball');
+    expect(httpGet).not.toHaveBeenCalled();
   });
 
-  it('returns isError when HTTP throws', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Network error'));
+  it('returns isError regardless of league parameter', async () => {
+    const ctx = makeCtx('Hardcore');
 
-    const result = await getMetaBuildsTool.handler({ skill: 'Fireball' }, ctx);
+    const result = await getMetaBuildsTool.handler({ skill: 'Fireball', league: 'Hardcore' }, ctx);
 
     expect(result.isError).toBe(true);
-    const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.error).toContain('Network error');
+  });
+
+  it('returns isError regardless of ascendancy parameter', async () => {
+    const ctx = makeCtx();
+
+    const result = await getMetaBuildsTool.handler(
+      { skill: 'Boneshatter', ascendancy: 'Juggernaut' },
+      ctx
+    );
+
+    expect(result.isError).toBe(true);
   });
 });

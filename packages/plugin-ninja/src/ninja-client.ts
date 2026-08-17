@@ -3,16 +3,10 @@ import type {
   MetaBuildData,
   ItemPrice,
   ItemCategory,
-  GemUsage,
-  ItemUsage,
-  KeystoneUsage,
-  StatRange,
-  RawNinjaBuildEntry,
   RawNinjaEconomyEntry,
 } from './types.js';
 
 /** TTLs in milliseconds */
-const BUILDS_TTL_MS = 60 * 60 * 1000;     // 1 hour
 const ECONOMY_TTL_MS = 15 * 60 * 1000;    // 15 minutes
 
 /** Categories backed by itemoverview vs currencyoverview */
@@ -32,7 +26,11 @@ const AUTO_DETECT_ORDER: ItemCategory[] = [
 ];
 
 export class NinjaClient {
-  private readonly buildsUrl = 'https://poe.ninja/api/data/builds';
+  // NOTE: The old builds endpoint (https://poe.ninja/api/data/builds) returned 404 as of
+  // August 2026 — poe.ninja migrated to an internal API at /poe1/api/builds/{version}/search
+  // that uses a proprietary compressed columnar format and is explicitly undocumented.
+  // getBuildsForSkill() currently returns an error until the new format is decoded.
+  // The economy endpoints below are unaffected.
   private readonly itemOverviewUrl = 'https://poe.ninja/api/data/itemoverview';
   private readonly currencyOverviewUrl = 'https://poe.ninja/api/data/currencyoverview';
 
@@ -43,85 +41,19 @@ export class NinjaClient {
   // ──────────────────────────────────────────────────────────────────────────
 
   async getBuildsForSkill(
-    skill: string,
-    ascendancy: string | null,
-    league: string
+    _skill: string,
+    _ascendancy: string | null,
+    _league: string
   ): Promise<MetaBuildData> {
-    const cacheKey = this.buildsCacheKey(skill, ascendancy, league);
-    const cached = this.ctx.cache.get<MetaBuildData>(cacheKey);
-    if (cached) return cached;
-
-    // Fetch the full build overview for the league
-    // NOTE: poe.ninja builds API field names are based on community documentation.
-    // If the response shape differs, update RawNinjaBuildEntry in types.ts.
-    const raw = await this.ctx.http.get<{ lines?: RawNinjaBuildEntry[] }>(this.buildsUrl, {
-      params: {
-        overview: league,
-        type: 'exp',
-        language: 'en',
-      },
-      timeoutMs: 30_000,
-    });
-
-    const lines: RawNinjaBuildEntry[] = raw?.lines ?? [];
-
-    // Filter to builds using the requested skill
-    let filtered = lines.filter((b) => {
-      const mainSkill = b.mainSkill ?? b.skill ?? '';
-      return mainSkill.toLowerCase() === skill.toLowerCase();
-    });
-
-    // Optionally narrow by ascendancy
-    if (ascendancy && filtered.length >= 5) {
-      const byAscendancy = filtered.filter(
-        (b) => (b.class ?? '').toLowerCase() === ascendancy.toLowerCase()
-      );
-      // Only apply the filter if there are enough samples
-      if (byAscendancy.length >= 5) {
-        filtered = byAscendancy;
-      } else {
-        this.ctx.logger.warn(
-          `[plugin-ninja] Only ${byAscendancy.length} builds found for ${skill}/${ascendancy}; ` +
-            `falling back to all ${filtered.length} ${skill} builds`
-        );
-      }
-    }
-
-    const sampleSize = filtered.length;
-    if (sampleSize === 0) {
-      // Return empty result rather than throwing — the skill might just not be popular
-      const empty: MetaBuildData = {
-        skill,
-        ascendancy,
-        league,
-        sampleSize: 0,
-        topSupportGems: [],
-        popularUniqueItems: [],
-        popularKeystones: [],
-        dpsRange: { min: 0, median: 0, max: 0 },
-        defenseRange: { min: 0, median: 0, max: 0 },
-        dataAsOf: new Date().toISOString(),
-      };
-      return empty;
-    }
-
-    const result: MetaBuildData = {
-      skill,
-      ascendancy: ascendancy ?? null,
-      league,
-      sampleSize,
-      topSupportGems: this.computeGemUsage(filtered, skill, sampleSize),
-      popularUniqueItems: this.computeItemUsage(filtered, sampleSize),
-      popularKeystones: this.computeKeystoneUsage(filtered, sampleSize),
-      dpsRange: this.computeStatRange(filtered.map((b) => b.dps ?? b.tDps ?? 0)),
-      defenseRange: this.computeStatRange(
-        filtered.map((b) => Math.max(b.life ?? 0, b.energyShield ?? 0))
-      ),
-      dataAsOf: new Date().toISOString(),
-    };
-
-    this.ctx.cache.set(cacheKey, result, BUILDS_TTL_MS);
-    return result;
+    // The poe.ninja builds API moved to an internal endpoint (/poe1/api/builds/{version}/search)
+    // that uses a proprietary compressed columnar format and provides no build codes.
+    // This method is disabled until the new format is decoded.
+    // See: https://github.com/anthropics/poe-ai (plugin-ninja ninja-client.ts)
+    throw new Error(
+      'The poe.ninja builds API has changed and is not yet supported. ' +
+      'The old endpoint returned HTTP 404 as of August 2026. ' +
+      'Use compare_builds in plugin-pob with a build code from pobb.in or a guide instead.'
+    );
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -192,84 +124,7 @@ export class NinjaClient {
   // Cache key helpers
   // ──────────────────────────────────────────────────────────────────────────
 
-  private buildsCacheKey(skill: string, ascendancy: string | null, league: string): string {
-    return `ninja:builds:${this.ctx.leagueState.patchVersion}:${league}:${skill}:${ascendancy ?? 'any'}`;
-  }
-
   private economyCacheKey(category: ItemCategory, league: string): string {
     return `ninja:economy:${this.ctx.leagueState.patchVersion}:${league}:${category}`;
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Aggregation helpers
-  // ──────────────────────────────────────────────────────────────────────────
-
-  private computeGemUsage(
-    builds: RawNinjaBuildEntry[],
-    mainSkill: string,
-    sampleSize: number
-  ): GemUsage[] {
-    const counts = new Map<string, number>();
-    for (const build of builds) {
-      for (const gem of build.activeGems ?? []) {
-        // Skip the main skill itself — we want supports and off-skills
-        if (gem.toLowerCase() === mainSkill.toLowerCase()) continue;
-        counts.set(gem, (counts.get(gem) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .map(([name, count]) => ({
-        name,
-        usagePercent: Math.round((count / sampleSize) * 1000) / 10,
-      }))
-      .sort((a, b) => b.usagePercent - a.usagePercent)
-      .slice(0, 10);
-  }
-
-  private computeItemUsage(builds: RawNinjaBuildEntry[], sampleSize: number): ItemUsage[] {
-    const counts = new Map<string, number>();
-    for (const build of builds) {
-      for (const item of build.items ?? []) {
-        counts.set(item, (counts.get(item) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .map(([name, count]) => ({
-        name,
-        usagePercent: Math.round((count / sampleSize) * 1000) / 10,
-      }))
-      .sort((a, b) => b.usagePercent - a.usagePercent)
-      .slice(0, 15);
-  }
-
-  private computeKeystoneUsage(builds: RawNinjaBuildEntry[], sampleSize: number): KeystoneUsage[] {
-    const counts = new Map<string, number>();
-    for (const build of builds) {
-      for (const keystone of build.keystonePassives ?? []) {
-        counts.set(keystone, (counts.get(keystone) ?? 0) + 1);
-      }
-    }
-    return [...counts.entries()]
-      .map(([name, count]) => ({
-        name,
-        usagePercent: Math.round((count / sampleSize) * 1000) / 10,
-      }))
-      .sort((a, b) => b.usagePercent - a.usagePercent)
-      .slice(0, 10);
-  }
-
-  private computeStatRange(values: number[]): StatRange {
-    const nonZero = values.filter((v) => v > 0).sort((a, b) => a - b);
-    if (nonZero.length === 0) return { min: 0, median: 0, max: 0 };
-    const mid = Math.floor(nonZero.length / 2);
-    const median =
-      nonZero.length % 2 === 0
-        ? (nonZero[mid - 1] + nonZero[mid]) / 2
-        : nonZero[mid];
-    return {
-      min: Math.round(nonZero[0]),
-      median: Math.round(median),
-      max: Math.round(nonZero[nonZero.length - 1]),
-    };
   }
 }

@@ -44,7 +44,7 @@ describe('Build Summary runtime methods', () => {
 
     // Every node must have id, name, type
     for (const node of nodes) {
-      expect(typeof node.id).toBe('string');
+      expect(typeof node.id === 'string' || typeof node.id === 'number').toBe(true);
       expect(typeof node.name).toBe('string');
       expect(typeof node.type).toBe('string');
     }

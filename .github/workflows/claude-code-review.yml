@@ -62,11 +62,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          REVIEW=$(cat /tmp/review.txt)
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --body "## Claude Code Review
-
-${REVIEW}
-
----
-*🤖 Reviewed by claude-opus-4-6*"
+          {
+            echo "## Claude Code Review"
+            echo ""
+            cat /tmp/review.txt
+            echo ""
+            echo "---"
+            echo "*🤖 Reviewed by claude-opus-4-6*"
+          } > /tmp/review-comment.txt
+          gh pr comment ${{ github.event.pull_request.number }} --body-file /tmp/review-comment.txt

@@ -352,12 +352,17 @@ export class CraftingClient {
    *
    * Multiple badge spans before the "x NNN%" indicate combined tag requirements
    * (i.e. the mod must have ALL of those tags).
+   *
+   * poedb moved the badge/multiplier list from the spawn-weight-multipliers
+   * markdown section into a <th>tags</th> table. We try that location first
+   * and fall back to the old section anchor for compatibility.
    */
   private parseSpawnWeightMultipliers(html: string): SpawnWeightMultiplier[] {
     const results: SpawnWeightMultiplier[] = [];
 
-    // Find the spawn-weight-multipliers section
-    const sectionIdx = html.indexOf('spawn-weight-multipliers');
+    // New location: <th>tags</th> table containing the badge list
+    const tagsThIdx = html.indexOf('<th>tags</th>');
+    const sectionIdx = tagsThIdx !== -1 ? tagsThIdx : html.indexOf('spawn-weight-multipliers');
     if (sectionIdx === -1) return results;
     const section = html.slice(sectionIdx, sectionIdx + 4000);
 

@@ -7,6 +7,15 @@ import type { PricedItem, WealthSummary } from '../types.js';
 
 const inputSchema = z.object({
   accountName: z.string().describe('PoE account name'),
+  poesessid: z
+    .string()
+    .optional()
+    .describe(
+      'PoE session ID (POESESSID cookie from pathofexile.com). ' +
+      'Required to access private stash tabs. ' +
+      'Grab it from browser DevTools → Application → Cookies on pathofexile.com. ' +
+      'Treat it like a password — it grants access to your account.'
+    ),
   league: z
     .string()
     .optional()
@@ -14,7 +23,7 @@ const inputSchema = z.object({
   tabNames: z
     .array(z.string())
     .optional()
-    .describe('Filter to specific tab names. Omit to scan all public tabs.'),
+    .describe('Filter to specific tab names. Omit to scan all tabs.'),
 });
 
 type Input = z.infer<typeof inputSchema>;
@@ -27,20 +36,21 @@ export const getStashValueTool: PluginTool<Input> = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputSchema: inputSchema as any,
 
-  async handler({ accountName, league, tabNames }: Input, ctx: PluginContext) {
+  async handler({ accountName, poesessid, league, tabNames }: Input, ctx: PluginContext) {
     const targetLeague = league ?? ctx.leagueState.currentLeague;
 
     try {
       ctx.logger.info(
-        `[get_stash_value] Scanning stash for account "${accountName}" in ${targetLeague}`
+        `[get_stash_value] Scanning stash for account "${accountName}" in ${targetLeague}` +
+        (poesessid ? ' (authenticated)' : ' (public tabs only)')
       );
 
-      const stashClient = new StashClient(ctx);
+      const stashClient = new StashClient(ctx, poesessid);
       const priceCache = new NinjaPriceCache(ctx);
       const pricer = new ItemPricer(priceCache);
 
-      // 1. Get public tabs
-      let tabs = await stashClient.getPublicTabs(accountName, targetLeague);
+      // 1. Get tabs
+      let tabs = await stashClient.getTabs(accountName, targetLeague);
 
       // 2. Filter by requested tab names (case-insensitive)
       if (tabNames && tabNames.length > 0) {

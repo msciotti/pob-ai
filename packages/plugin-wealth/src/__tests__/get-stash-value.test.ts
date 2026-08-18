@@ -9,7 +9,7 @@ import type { StashTab, RawStashItem } from '../types.js';
 // The mock factories use regular functions so they can be used as constructors.
 // ──────────────────────────────────────────────────────────────────────────────
 
-const mockGetPublicTabs = vi.fn<() => Promise<StashTab[]>>();
+const mockGetTabs = vi.fn<() => Promise<StashTab[]>>();
 const mockGetTabItems = vi.fn<() => Promise<RawStashItem[]>>();
 const mockPriceItem = vi.fn<() => Promise<{ chaosValue: number; category: string } | null>>();
 const mockGetDivinePrice = vi.fn<() => Promise<number>>();
@@ -18,7 +18,7 @@ const mockGetPriceMap = vi.fn();
 vi.mock('../stash-client.js', () => {
   function StashClient() {
     return {
-      getPublicTabs: mockGetPublicTabs,
+      getTabs: mockGetTabs,
       getTabItems: mockGetTabItems,
     };
   }
@@ -108,7 +108,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('sums chaos values correctly across multiple tabs', async () => {
-    mockGetPublicTabs.mockResolvedValue([makeTab(0), makeTab(1)]);
+    mockGetTabs.mockResolvedValue([makeTab(0), makeTab(1)]);
     mockGetTabItems
       .mockResolvedValueOnce([makeCurrencyItem('Divine Orb', 2)])
       .mockResolvedValueOnce([makeCurrencyItem('Chaos Orb', 10)]);
@@ -126,7 +126,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('converts chaos to divine using divine price', async () => {
-    mockGetPublicTabs.mockResolvedValue([makeTab(0)]);
+    mockGetTabs.mockResolvedValue([makeTab(0)]);
     mockGetTabItems.mockResolvedValue([makeCurrencyItem('Divine Orb', 1)]);
     mockPriceItem.mockResolvedValue({ chaosValue: 400, category: 'Currency' });
     mockGetDivinePrice.mockResolvedValue(200);
@@ -140,7 +140,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('groups priced items by category', async () => {
-    mockGetPublicTabs.mockResolvedValue([makeTab(0)]);
+    mockGetTabs.mockResolvedValue([makeTab(0)]);
     mockGetTabItems.mockResolvedValue([
       makeCurrencyItem('Divine Orb', 1),
       {
@@ -163,7 +163,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('filters tabs by tabNames (case-insensitive)', async () => {
-    mockGetPublicTabs.mockResolvedValue([
+    mockGetTabs.mockResolvedValue([
       makeTab(0, 'Currency'),
       makeTab(1, 'Maps'),
       makeTab(2, 'Junk'),
@@ -183,7 +183,7 @@ describe('get_stash_value tool', () => {
 
   it('caps at 20 tabs even if more are available', async () => {
     const manyTabs = Array.from({ length: 25 }, (_, i) => makeTab(i));
-    mockGetPublicTabs.mockResolvedValue(manyTabs);
+    mockGetTabs.mockResolvedValue(manyTabs);
     mockGetTabItems.mockResolvedValue([]);
     mockPriceItem.mockResolvedValue(null);
 
@@ -196,7 +196,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('counts unpriced items correctly', async () => {
-    mockGetPublicTabs.mockResolvedValue([makeTab(0)]);
+    mockGetTabs.mockResolvedValue([makeTab(0)]);
     const rareItem: RawStashItem = {
       id: 'rare1', name: 'Dreadful Salvation', typeLine: 'Hubris Circlet',
       baseType: 'Hubris Circlet', ilvl: 86, frameType: 2,
@@ -214,7 +214,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('handles empty stash gracefully', async () => {
-    mockGetPublicTabs.mockResolvedValue([makeTab(0)]);
+    mockGetTabs.mockResolvedValue([makeTab(0)]);
     mockGetTabItems.mockResolvedValue([]);
 
     const ctx = makeCtx();
@@ -229,7 +229,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('handles no public tabs gracefully', async () => {
-    mockGetPublicTabs.mockResolvedValue([]);
+    mockGetTabs.mockResolvedValue([]);
 
     const ctx = makeCtx();
     const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
@@ -242,7 +242,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('uses ctx.leagueState.currentLeague when league is omitted', async () => {
-    mockGetPublicTabs.mockResolvedValue([]);
+    mockGetTabs.mockResolvedValue([]);
 
     const ctx = makeCtx();
     const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
@@ -252,7 +252,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('uses the provided league when given', async () => {
-    mockGetPublicTabs.mockResolvedValue([]);
+    mockGetTabs.mockResolvedValue([]);
 
     const ctx = makeCtx();
     const result = await getStashValueTool.handler(
@@ -265,7 +265,7 @@ describe('get_stash_value tool', () => {
   });
 
   it('returns isError on unexpected failure', async () => {
-    mockGetPublicTabs.mockRejectedValue(new Error('Network error'));
+    mockGetTabs.mockRejectedValue(new Error('Network error'));
 
     const ctx = makeCtx();
     const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);

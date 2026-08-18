@@ -39,8 +39,8 @@ function makeCtx(httpGetImpl?: (url: string, opts: unknown) => unknown): PluginC
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('StashClient', () => {
-  describe('getPublicTabs', () => {
-    it('filters out non-public tabs', async () => {
+  describe('getTabs', () => {
+    it('filters out hidden tabs but includes private tabs', async () => {
       const ctx = makeCtx(() => ({
         tabs: [
           { id: 'a', n: 'Public Tab', type: 'NormalStash', i: 0, public: true },
@@ -50,10 +50,13 @@ describe('StashClient', () => {
       }));
 
       const client = new StashClient(ctx);
-      const tabs = await client.getPublicTabs('TestAccount', 'Settlers');
+      const tabs = await client.getTabs('TestAccount', 'Settlers');
 
-      expect(tabs).toHaveLength(1);
-      expect(tabs[0].name).toBe('Public Tab');
+      // hidden tabs are excluded; private tabs are included (API filters by auth, not client)
+      expect(tabs).toHaveLength(2);
+      expect(tabs.map(t => t.name)).toContain('Public Tab');
+      expect(tabs.map(t => t.name)).toContain('Private Tab');
+      expect(tabs.map(t => t.name)).not.toContain('Hidden Tab');
     });
 
     it('maps raw tab fields to StashTab shape', async () => {
@@ -64,7 +67,7 @@ describe('StashClient', () => {
       }));
 
       const client = new StashClient(ctx);
-      const tabs = await client.getPublicTabs('TestAccount', 'Settlers');
+      const tabs = await client.getTabs('TestAccount', 'Settlers');
 
       expect(tabs[0]).toEqual({
         id: 'abc',
@@ -78,7 +81,7 @@ describe('StashClient', () => {
     it('returns empty array when response has no tabs', async () => {
       const ctx = makeCtx(() => ({}));
       const client = new StashClient(ctx);
-      const tabs = await client.getPublicTabs('TestAccount', 'Settlers');
+      const tabs = await client.getTabs('TestAccount', 'Settlers');
       expect(tabs).toEqual([]);
     });
 
@@ -88,8 +91,8 @@ describe('StashClient', () => {
       }));
       const client = new StashClient(ctx);
 
-      await client.getPublicTabs('TestAccount', 'Settlers');
-      await client.getPublicTabs('TestAccount', 'Settlers');
+      await client.getTabs('TestAccount', 'Settlers');
+      await client.getTabs('TestAccount', 'Settlers');
 
       // Should only have called http.get once; the second call hits cache
       expect(ctx.http.get).toHaveBeenCalledTimes(1);
@@ -99,7 +102,7 @@ describe('StashClient', () => {
       const ctx = makeCtx(() => ({ tabs: [] }));
       const client = new StashClient(ctx);
 
-      await client.getPublicTabs('MyAccount', 'Settlers');
+      await client.getTabs('MyAccount', 'Settlers');
 
       expect(ctx.http.get).toHaveBeenCalledWith(
         'https://www.pathofexile.com/character-window/get-stash-items',

@@ -26,36 +26,46 @@ interface StashItemsResponse {
 }
 
 export class StashClient {
-  constructor(private ctx: PluginContext) {}
+  constructor(private ctx: PluginContext, private poesessid?: string) {}
+
+  private get headers(): Record<string, string> | undefined {
+    return this.poesessid
+      ? { Cookie: `POESESSID=${this.poesessid}` }
+      : undefined;
+  }
 
   /**
-   * Fetch the tab list for an account+league, returning only public tabs.
+   * Fetch the tab list for an account+league.
+   * With a POESESSID, returns all tabs. Without one, returns only public tabs.
    * Results are cached for 5 minutes.
    */
-  async getPublicTabs(accountName: string, league: string): Promise<StashTab[]> {
-    const key = `wealth:stash:tabs:${accountName}:${league}`;
+  async getTabs(accountName: string, league: string): Promise<StashTab[]> {
+    const key = `wealth:stash:tabs:${accountName}:${league}:${this.poesessid ? 'auth' : 'public'}`;
     const cached = this.ctx.cache.get<StashTab[]>(key);
     if (cached) return cached;
 
+    const params: Record<string, string | number | boolean> = {
+      accountName,
+      league,
+      tabs: 1,
+      tabIndex: 0,
+    };
+    if (!this.poesessid) params['public'] = true;
+
     const raw = await this.ctx.http.get<StashTabListResponse>(POE_API, {
-      params: {
-        accountName,
-        league,
-        tabs: 1,
-        tabIndex: 0,
-        public: true,
-      },
+      params,
+      headers: this.headers,
       timeoutMs: 20_000,
     });
 
     const tabs: StashTab[] = (raw?.tabs ?? [])
-      .filter(t => t.public === true && t.hidden !== true)
+      .filter(t => t.hidden !== true)
       .map(t => ({
         id: t.id,
         name: t.n,
         type: t.type,
         index: t.i,
-        public: true,
+        public: t.public === true,
       }));
 
     this.ctx.cache.set(key, tabs, TAB_LIST_TTL_MS);
@@ -65,21 +75,23 @@ export class StashClient {
   /**
    * Fetch items from a specific stash tab by its index.
    * Results are cached for 2 minutes.
-   * Respects the MAX_TABS cap (callers should not pass a tabIndex beyond that).
    */
   async getTabItems(accountName: string, league: string, tabIndex: number): Promise<RawStashItem[]> {
-    const key = `wealth:stash:items:${accountName}:${league}:${tabIndex}`;
+    const key = `wealth:stash:items:${accountName}:${league}:${tabIndex}:${this.poesessid ? 'auth' : 'public'}`;
     const cached = this.ctx.cache.get<RawStashItem[]>(key);
     if (cached) return cached;
 
+    const params: Record<string, string | number | boolean> = {
+      accountName,
+      league,
+      tabs: 0,
+      tabIndex,
+    };
+    if (!this.poesessid) params['public'] = true;
+
     const raw = await this.ctx.http.get<StashItemsResponse>(POE_API, {
-      params: {
-        accountName,
-        league,
-        tabs: 0,
-        tabIndex,
-        public: true,
-      },
+      params,
+      headers: this.headers,
       timeoutMs: 20_000,
     });
 

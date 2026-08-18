@@ -2,8 +2,9 @@ import type { PluginContext } from '@poe-ai/core';
 import type { NinjaPriceLine } from './types.js';
 
 const TTL_MS = 15 * 60 * 1000;
-const ITEM_URL = 'https://poe.ninja/api/data/itemoverview';
-const CURRENCY_URL = 'https://poe.ninja/api/data/currencyoverview';
+
+const ITEM_URL = 'https://poe.ninja/poe1/api/economy/stash/current/item/overview';
+const CURRENCY_URL = 'https://poe.ninja/poe1/api/economy/stash/current/currency/overview';
 
 type NinjaCategory =
   | 'Currency' | 'Fragment'
@@ -12,6 +13,26 @@ type NinjaCategory =
   | 'DivinationCard' | 'SkillGem';
 
 const CURRENCY_CATS: NinjaCategory[] = ['Currency', 'Fragment'];
+
+/** Raw shape returned by the currency endpoint */
+interface RawCurrencyLine {
+  currencyTypeName: string;
+  chaosEquivalent: number;
+  divineValue?: number;
+  listingCount?: number;
+}
+
+/** Raw shape returned by the item endpoint */
+interface RawItemLine {
+  name: string;
+  chaosValue: number;
+  divineValue?: number;
+  listingCount?: number;
+  count?: number;
+  variant?: string;
+}
+
+const USER_AGENT = 'poe-ai/1.0 (github.com/msciotti/poe-ai)';
 
 export class NinjaPriceCache {
   constructor(private ctx: PluginContext) {}
@@ -22,17 +43,50 @@ export class NinjaPriceCache {
     if (cached) return cached;
 
     const isCurrency = (CURRENCY_CATS as string[]).includes(category);
-    const url = isCurrency ? CURRENCY_URL : ITEM_URL;
-    const raw = await this.ctx.http.get<{ lines?: NinjaPriceLine[] }>(url, {
+    const map = isCurrency
+      ? await this.fetchCurrencyMap(category, league)
+      : await this.fetchItemMap(category, league);
+
+    this.ctx.cache.set(key, map, TTL_MS);
+    return map;
+  }
+
+  private async fetchCurrencyMap(category: NinjaCategory, league: string): Promise<Map<string, NinjaPriceLine>> {
+    const raw = await this.ctx.http.get<{ lines?: RawCurrencyLine[] }>(CURRENCY_URL, {
       params: { league, type: category },
+      headers: { 'User-Agent': USER_AGENT },
       timeoutMs: 15_000,
     });
 
     const map = new Map<string, NinjaPriceLine>();
     for (const line of raw?.lines ?? []) {
-      map.set(line.name.toLowerCase(), line);
+      map.set(line.currencyTypeName.toLowerCase(), {
+        name: line.currencyTypeName,
+        chaosValue: line.chaosEquivalent,
+        divineValue: line.divineValue,
+        listingCount: line.listingCount,
+      });
     }
-    this.ctx.cache.set(key, map, TTL_MS);
+    return map;
+  }
+
+  private async fetchItemMap(category: NinjaCategory, league: string): Promise<Map<string, NinjaPriceLine>> {
+    const raw = await this.ctx.http.get<{ lines?: RawItemLine[] }>(ITEM_URL, {
+      params: { league, type: category },
+      headers: { 'User-Agent': USER_AGENT },
+      timeoutMs: 15_000,
+    });
+
+    const map = new Map<string, NinjaPriceLine>();
+    for (const line of raw?.lines ?? []) {
+      map.set(line.name.toLowerCase(), {
+        name: line.name,
+        chaosValue: line.chaosValue,
+        divineValue: line.divineValue,
+        listingCount: line.listingCount ?? line.count,
+        variant: line.variant,
+      });
+    }
     return map;
   }
 

@@ -3,6 +3,7 @@ import type { PluginTool, PluginContext } from '@poe-ai/core';
 import { StashClient } from '../stash-client.js';
 import { NinjaPriceCache } from '../ninja-prices.js';
 import { ItemPricer } from '../item-pricer.js';
+import { getCredentials } from '../index.js';
 import type { PricedItem, WealthSummary } from '../types.js';
 
 const inputSchema = z.object({
@@ -23,11 +24,26 @@ export const getStashValueTool: PluginTool<Input> = {
   description:
     'Fetch stash tabs for the authenticated PoE account and return a total wealth breakdown ' +
     'by category (currency, maps, uniques, gems, divination cards) in both chaos and divine orbs. ' +
-    'Requires running oauth-login.mjs once to authenticate.',
+    'Requires POE_SESSION_ID and POE_CF_CLEARANCE environment variables.',
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputSchema: inputSchema as any,
 
   async handler({ league, tabNames }: Input, ctx: PluginContext) {
+    const { sessionId, cfClearance } = getCredentials();
+
+    if (!sessionId || !cfClearance) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            success: false,
+            error: 'Stash API credentials not configured. Set POE_SESSION_ID and POE_CF_CLEARANCE environment variables.',
+          }),
+        }],
+        isError: true,
+      };
+    }
+
     const targetLeague = league ?? ctx.leagueState.currentLeague;
 
     try {
@@ -35,7 +51,7 @@ export const getStashValueTool: PluginTool<Input> = {
         `[get_stash_value] Scanning stash in ${targetLeague}`
       );
 
-      const stashClient = new StashClient(ctx);
+      const stashClient = new StashClient(ctx, sessionId, cfClearance);
       const priceCache = new NinjaPriceCache(ctx);
       const pricer = new ItemPricer(priceCache);
 
@@ -65,7 +81,7 @@ export const getStashValueTool: PluginTool<Input> = {
       let unpricedItems = 0;
 
       for (const tab of tabs) {
-        const items = await stashClient.getTabItems(targetLeague, tab.id);
+        const items = await stashClient.getTabItems(targetLeague, tab.index);
 
         for (const raw of items) {
           const priced = await pricer.priceItem(raw, targetLeague);

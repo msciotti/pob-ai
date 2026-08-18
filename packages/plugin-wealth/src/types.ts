@@ -4,7 +4,6 @@ export interface StashTab {
   name: string;
   type: string;     // "NormalStash", "CurrencyStash", "MapStash", "PremiumStash", etc.
   index: number;
-  public: boolean;
 }
 
 /** Raw item from the PoE stash API */

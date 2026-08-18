@@ -15,6 +15,10 @@ const mockPriceItem = vi.fn<() => Promise<{ chaosValue: number; category: string
 const mockGetDivinePrice = vi.fn<() => Promise<number>>();
 const mockGetPriceMap = vi.fn();
 
+vi.mock('../index.js', () => ({
+  getCredentials: () => ({ sessionId: 'test-session', cfClearance: 'test-cf' }),
+}));
+
 vi.mock('../stash-client.js', () => {
   function StashClient() {
     return {
@@ -75,8 +79,8 @@ function makeCtx(): PluginContext {
   } as unknown as PluginContext;
 }
 
-function makeTab(index: number, name = `Tab ${index}`, isPublic = true): StashTab {
-  return { id: `tab-${index}`, name, type: 'NormalStash', index, public: isPublic };
+function makeTab(index: number, name = `Tab ${index}`): StashTab {
+  return { id: `tab-${index}`, name, type: 'NormalStash', index };
 }
 
 function makeCurrencyItem(typeLine: string, stackSize = 1): RawStashItem {
@@ -228,7 +232,7 @@ describe('get_stash_value tool', () => {
     expect(data.unpricedItems).toBe(0);
   });
 
-  it('handles no public tabs gracefully', async () => {
+  it('handles empty tab list gracefully', async () => {
     mockGetTabs.mockResolvedValue([]);
 
     const ctx = makeCtx();

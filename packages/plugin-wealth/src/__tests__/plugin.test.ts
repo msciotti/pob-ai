@@ -34,12 +34,31 @@ describe('WealthPlugin', () => {
     expect(WealthPlugin.patchCompatibility).toBe('*');
   });
 
-  it('initialize() resolves without error and logs', async () => {
+  it('initialize() resolves without error', async () => {
     const ctx = makeCtx();
     await expect(WealthPlugin.initialize(ctx)).resolves.toBeUndefined();
+  });
+
+  it('initialize() warns when credentials are missing', async () => {
+    const ctx = makeCtx();
+    delete process.env['POE_SESSION_ID'];
+    delete process.env['POE_CF_CLEARANCE'];
+    await WealthPlugin.initialize(ctx);
+    expect(ctx.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('POE_SESSION_ID')
+    );
+  });
+
+  it('initialize() logs ready when credentials are set', async () => {
+    const ctx = makeCtx();
+    process.env['POE_SESSION_ID'] = 'test-session';
+    process.env['POE_CF_CLEARANCE'] = 'test-clearance';
+    await WealthPlugin.initialize(ctx);
     expect(ctx.logger.info).toHaveBeenCalledWith(
       expect.stringContaining('@poe-ai/plugin-wealth')
     );
+    delete process.env['POE_SESSION_ID'];
+    delete process.env['POE_CF_CLEARANCE'];
   });
 
   it('tools array contains get_stash_value', () => {

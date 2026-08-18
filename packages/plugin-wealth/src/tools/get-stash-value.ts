@@ -6,16 +6,6 @@ import { ItemPricer } from '../item-pricer.js';
 import type { PricedItem, WealthSummary } from '../types.js';
 
 const inputSchema = z.object({
-  accountName: z.string().describe('PoE account name'),
-  poesessid: z
-    .string()
-    .optional()
-    .describe(
-      'PoE session ID (POESESSID cookie from pathofexile.com). ' +
-      'Required to access private stash tabs. ' +
-      'Grab it from browser DevTools → Application → Cookies on pathofexile.com. ' +
-      'Treat it like a password — it grants access to your account.'
-    ),
   league: z
     .string()
     .optional()
@@ -31,26 +21,26 @@ type Input = z.infer<typeof inputSchema>;
 export const getStashValueTool: PluginTool<Input> = {
   name: 'get_stash_value',
   description:
-    'Fetch public stash tabs for a PoE account and return a total wealth breakdown ' +
-    'by category (currency, maps, uniques, gems, divination cards) in both chaos and divine orbs.',
+    'Fetch stash tabs for the authenticated PoE account and return a total wealth breakdown ' +
+    'by category (currency, maps, uniques, gems, divination cards) in both chaos and divine orbs. ' +
+    'Requires running oauth-login.mjs once to authenticate.',
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputSchema: inputSchema as any,
 
-  async handler({ accountName, poesessid, league, tabNames }: Input, ctx: PluginContext) {
+  async handler({ league, tabNames }: Input, ctx: PluginContext) {
     const targetLeague = league ?? ctx.leagueState.currentLeague;
 
     try {
       ctx.logger.info(
-        `[get_stash_value] Scanning stash for account "${accountName}" in ${targetLeague}` +
-        (poesessid ? ' (authenticated)' : ' (public tabs only)')
+        `[get_stash_value] Scanning stash in ${targetLeague}`
       );
 
-      const stashClient = new StashClient(ctx, poesessid);
+      const stashClient = new StashClient(ctx);
       const priceCache = new NinjaPriceCache(ctx);
       const pricer = new ItemPricer(priceCache);
 
       // 1. Get tabs
-      let tabs = await stashClient.getTabs(accountName, targetLeague);
+      let tabs = await stashClient.getTabs(targetLeague);
 
       // 2. Filter by requested tab names (case-insensitive)
       if (tabNames && tabNames.length > 0) {
@@ -66,7 +56,7 @@ export const getStashValueTool: PluginTool<Input> = {
         tabs = tabs.slice(0, StashClient.MAX_TABS);
       }
 
-      // 4. Get divine price for conversion (fetched once, reused for all items)
+      // 4. Get divine price for conversion
       const divinePrice = await priceCache.getDivinePrice(targetLeague);
 
       // 5. Fetch and price items from each tab
@@ -75,7 +65,7 @@ export const getStashValueTool: PluginTool<Input> = {
       let unpricedItems = 0;
 
       for (const tab of tabs) {
-        const items = await stashClient.getTabItems(accountName, targetLeague, tab.index);
+        const items = await stashClient.getTabItems(targetLeague, tab.id);
 
         for (const raw of items) {
           const priced = await pricer.priceItem(raw, targetLeague);
@@ -130,7 +120,6 @@ export const getStashValueTool: PluginTool<Input> = {
             text: JSON.stringify(
               {
                 success: true,
-                accountName,
                 league: targetLeague,
                 ...summary,
               },

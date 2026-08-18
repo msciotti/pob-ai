@@ -1,26 +1,49 @@
 #!/usr/bin/env node
 /**
  * Quick smoke test for the wealth tracker against a live PoE account.
- * Usage: node scripts/test-stash-value.mjs [accountName] [league]
+ * Usage: node scripts/test-stash-value.mjs [league]
+ * Requires: node scripts/oauth-login.mjs (run once to authenticate)
  */
 
-const accountName = process.argv[2] ?? 'ThiccCheney';
-const league = process.argv[3] ?? 'Allflame';
-const poesessid = process.env.POESESSID;
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 
-const POE_API = 'https://www.pathofexile.com/character-window/get-stash-items';
+const league = process.argv[2] ?? 'Standard';
+const TOKEN_PATH = join(homedir(), '.config', 'poe-ai', 'tokens.json');
+
+const POE_API_BASE = 'https://api.pathofexile.com/stash';
 const NINJA_ITEM = 'https://poe.ninja/api/data/itemoverview';
 const NINJA_CURRENCY = 'https://poe.ninja/api/data/currencyoverview';
 
+// ── Load token ───────────────────────────────────────────────────────────────
+
+async function loadToken() {
+  try {
+    const raw = await readFile(TOKEN_PATH, 'utf-8');
+    return JSON.parse(raw).access_token;
+  } catch {
+    console.error('❌ No OAuth token found.');
+    console.error('   Run: node packages/plugin-wealth/scripts/oauth-login.mjs');
+    process.exit(1);
+  }
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-async function fetchJson(url, params = {}) {
+async function fetchJson(url, params = {}, token) {
   const qs = new URLSearchParams(params).toString();
   const fullUrl = qs ? `${url}?${qs}` : url;
-  const headers = { 'User-Agent': 'poe-ai-wealth-test/0.1' };
-  if (poesessid) headers['Cookie'] = `POESESSID=${poesessid}`;
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json',
+  };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(fullUrl, { headers });
-  if (!res.ok) throw new Error(`HTTP ${res.status} from ${fullUrl}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '(no body)');
+    throw new Error(`HTTP ${res.status} from ${fullUrl}\n  Body: ${body.slice(0, 500)}`);
+  }
   return res.json();
 }
 
@@ -45,16 +68,16 @@ function uniqueName(item) {
 async function loadPrices() {
   console.log('📊 Loading poe.ninja prices...');
   const categories = [
-    ['Currency',       NINJA_CURRENCY],
-    ['Fragment',       NINJA_CURRENCY],
-    ['Map',            NINJA_ITEM],
-    ['DivinationCard', NINJA_ITEM],
-    ['SkillGem',       NINJA_ITEM],
-    ['UniqueWeapon',   NINJA_ITEM],
-    ['UniqueArmour',   NINJA_ITEM],
-    ['UniqueAccessory',NINJA_ITEM],
-    ['UniqueJewel',    NINJA_ITEM],
-    ['UniqueFlask',    NINJA_ITEM],
+    ['Currency',        NINJA_CURRENCY],
+    ['Fragment',        NINJA_CURRENCY],
+    ['Map',             NINJA_ITEM],
+    ['DivinationCard',  NINJA_ITEM],
+    ['SkillGem',        NINJA_ITEM],
+    ['UniqueWeapon',    NINJA_ITEM],
+    ['UniqueArmour',    NINJA_ITEM],
+    ['UniqueAccessory', NINJA_ITEM],
+    ['UniqueJewel',     NINJA_ITEM],
+    ['UniqueFlask',     NINJA_ITEM],
   ];
 
   const prices = {};
@@ -112,34 +135,27 @@ function priceItem(item, prices) {
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`\n🔍 Checking stash for ${accountName} in ${league}${poesessid ? ' (authenticated)' : ' (public only)'}\n`);
+  console.log(`\n🔍 Checking stash in ${league}\n`);
+
+  const token = await loadToken();
 
   // 1. Fetch tab list
-  if (!poesessid) {
-    console.warn('⚠️  No POESESSID set — only public tabs will be visible.');
-    console.warn('   Set it with: POESESSID=your_session_id node scripts/test-stash-value.mjs\n');
-  }
-
   let tabData;
-  const tabParams = { accountName, league, tabs: 1, tabIndex: 0 };
-  if (!poesessid) tabParams.public = true;
   try {
-    tabData = await fetchJson(POE_API, tabParams);
+    tabData = await fetchJson(`${POE_API_BASE}/${encodeURIComponent(league)}`, {}, token);
   } catch (e) {
     console.error(`❌ Failed to fetch tab list: ${e.message}`);
     process.exit(1);
   }
 
-  const allTabs = tabData.tabs ?? [];
-  const publicTabs = allTabs.filter(t => t.public === true && t.hidden !== true);
-
-  console.log(`📦 Total tabs: ${allTabs.length}, Public: ${publicTabs.length}`);
-  if (publicTabs.length === 0) {
-    console.log('\n⚠️  No public stash tabs found. Make sure some tabs are set to public in-game.');
+  const tabs = tabData.stashes ?? [];
+  console.log(`📦 Stash tabs: ${tabs.length}`);
+  if (tabs.length === 0) {
+    console.log('\n⚠️  No stash tabs found.');
     return;
   }
 
-  publicTabs.forEach(t => console.log(`   [${t.i}] ${t.n} (${t.type})`));
+  tabs.forEach(t => console.log(`   [${t.index}] ${t.name} (${t.type})`));
   console.log();
 
   // 2. Load prices
@@ -147,19 +163,21 @@ async function main() {
   const divinePrice = prices['Currency']?.get('divine orb') ?? 1;
   console.log(`\n💎 Divine Orb = ${divinePrice}c\n`);
 
-  // 3. Fetch and price items from each public tab (cap at 10 for the test)
-  const tabs = publicTabs.slice(0, 10);
+  // 3. Fetch and price items from each tab (cap at 10 for the test)
+  const testTabs = tabs.slice(0, 10);
   const byCategory = {};
   let totalChaos = 0;
   let unpriced = 0;
 
-  for (const tab of tabs) {
-    process.stdout.write(`  Fetching tab "${tab.n}"... `);
+  for (const tab of testTabs) {
+    process.stdout.write(`  Fetching tab "${tab.name}"... `);
     try {
-      const itemParams = { accountName, league, tabs: 0, tabIndex: tab.i };
-      if (!poesessid) itemParams.public = true;
-      const data = await fetchJson(POE_API, itemParams);
-      const items = data.items ?? [];
+      const data = await fetchJson(
+        `${POE_API_BASE}/${encodeURIComponent(league)}/${tab.id}`,
+        {},
+        token
+      );
+      const items = data.stash?.items ?? [];
       let tabChaos = 0;
 
       for (const item of items) {
@@ -175,13 +193,12 @@ async function main() {
       console.log(`failed (${e.message})`);
     }
 
-    // Polite delay between tab requests
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1200));
   }
 
   // 4. Print summary
   console.log('\n═══════════════════════════════════════');
-  console.log(`💰 WEALTH SUMMARY — ${accountName} (${league})`);
+  console.log(`💰 WEALTH SUMMARY — ${league}`);
   console.log('═══════════════════════════════════════');
   console.log(`Total: ${totalChaos.toFixed(0)}c / ${(totalChaos / divinePrice).toFixed(1)} div`);
   console.log(`Unpriced items: ${unpriced}\n`);

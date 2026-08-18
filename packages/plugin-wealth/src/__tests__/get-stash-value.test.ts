@@ -117,7 +117,7 @@ describe('get_stash_value tool', () => {
       .mockResolvedValueOnce({ chaosValue: 10, category: 'Currency' });
 
     const ctx = makeCtx();
-    const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
+    const result = await getStashValueTool.handler({}, ctx);
 
     const data = parseResult(result);
     expect(data.success).toBe(true);
@@ -132,7 +132,7 @@ describe('get_stash_value tool', () => {
     mockGetDivinePrice.mockResolvedValue(200);
 
     const ctx = makeCtx();
-    const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
+    const result = await getStashValueTool.handler({}, ctx);
 
     const data = parseResult(result);
     expect(data.totalDivineValue).toBe(2); // 400 / 200
@@ -153,7 +153,7 @@ describe('get_stash_value tool', () => {
       .mockResolvedValueOnce({ chaosValue: 4000, category: 'DivinationCard' });
 
     const ctx = makeCtx();
-    const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
+    const result = await getStashValueTool.handler({}, ctx);
 
     const data = parseResult(result);
     expect(Object.keys(data.byCategory)).toContain('Currency');
@@ -173,7 +173,7 @@ describe('get_stash_value tool', () => {
 
     const ctx = makeCtx();
     await getStashValueTool.handler(
-      { accountName: 'TestUser', tabNames: ['currency', 'maps'] },
+      { tabNames: ['currency', 'maps'] },
       ctx
     );
 
@@ -188,7 +188,7 @@ describe('get_stash_value tool', () => {
     mockPriceItem.mockResolvedValue(null);
 
     const ctx = makeCtx();
-    const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
+    const result = await getStashValueTool.handler({}, ctx);
 
     expect(mockGetTabItems).toHaveBeenCalledTimes(MAX_TABS);
     const data = parseResult(result);
@@ -206,7 +206,7 @@ describe('get_stash_value tool', () => {
     mockPriceItem.mockResolvedValue(null);
 
     const ctx = makeCtx();
-    const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
+    const result = await getStashValueTool.handler({}, ctx);
 
     const data = parseResult(result);
     expect(data.unpricedItems).toBe(2);
@@ -218,7 +218,7 @@ describe('get_stash_value tool', () => {
     mockGetTabItems.mockResolvedValue([]);
 
     const ctx = makeCtx();
-    const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
+    const result = await getStashValueTool.handler({}, ctx);
 
     const data = parseResult(result);
     expect(data.success).toBe(true);
@@ -232,7 +232,7 @@ describe('get_stash_value tool', () => {
     mockGetTabs.mockResolvedValue([]);
 
     const ctx = makeCtx();
-    const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
+    const result = await getStashValueTool.handler({}, ctx);
 
     const data = parseResult(result);
     expect(data.success).toBe(true);
@@ -245,7 +245,7 @@ describe('get_stash_value tool', () => {
     mockGetTabs.mockResolvedValue([]);
 
     const ctx = makeCtx();
-    const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
+    const result = await getStashValueTool.handler({}, ctx);
 
     const data = parseResult(result);
     expect(data.league).toBe('Settlers');
@@ -256,7 +256,7 @@ describe('get_stash_value tool', () => {
 
     const ctx = makeCtx();
     const result = await getStashValueTool.handler(
-      { accountName: 'TestUser', league: 'Hardcore Settlers' },
+      { league: 'Hardcore Settlers' },
       ctx
     );
 
@@ -268,7 +268,7 @@ describe('get_stash_value tool', () => {
     mockGetTabs.mockRejectedValue(new Error('Network error'));
 
     const ctx = makeCtx();
-    const result = await getStashValueTool.handler({ accountName: 'TestUser' }, ctx);
+    const result = await getStashValueTool.handler({}, ctx);
 
     expect(result.isError).toBe(true);
     const data = parseResult(result);

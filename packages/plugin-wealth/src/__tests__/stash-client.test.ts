@@ -2,15 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StashClient } from '../stash-client.js';
 import type { PluginContext } from '@poe-ai/core';
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Mock context factory
-// ──────────────────────────────────────────────────────────────────────────────
+// Mock token-store so tests don't hit disk
+vi.mock('../token-store.js', () => ({
+  readToken: vi.fn().mockResolvedValue({
+    access_token: 'test-bearer-token',
+    token_type: 'Bearer',
+    expires_in: 3600,
+    scope: 'account:stashes',
+  }),
+}));
 
 function makeCtx(httpGetImpl?: (url: string, opts: unknown) => unknown): PluginContext {
   const store = new Map<string, unknown>();
   return {
     http: {
-      get: vi.fn().mockImplementation(httpGetImpl ?? (() => ({ tabs: [], items: [] }))),
+      get: vi.fn().mockImplementation(httpGetImpl ?? (() => ({ stashes: [], stash: { items: [] } }))),
       post: vi.fn(),
     },
     cache: {
@@ -34,43 +40,20 @@ function makeCtx(httpGetImpl?: (url: string, opts: unknown) => unknown): PluginC
   } as unknown as PluginContext;
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Tests
-// ──────────────────────────────────────────────────────────────────────────────
-
 describe('StashClient', () => {
   describe('getTabs', () => {
-    it('filters out hidden tabs but includes private tabs', async () => {
+    it('maps GGG stash list response to StashTab shape', async () => {
       const ctx = makeCtx(() => ({
-        tabs: [
-          { id: 'a', n: 'Public Tab', type: 'NormalStash', i: 0, public: true },
-          { id: 'b', n: 'Private Tab', type: 'NormalStash', i: 1, public: false },
-          { id: 'c', n: 'Hidden Tab', type: 'NormalStash', i: 2, public: true, hidden: true },
+        stashes: [
+          { id: 'abc-123', name: 'Currency', type: 'CurrencyStash', index: 3, metadata: { public: true } },
         ],
       }));
 
       const client = new StashClient(ctx);
-      const tabs = await client.getTabs('TestAccount', 'Settlers');
-
-      // hidden tabs are excluded; private tabs are included (API filters by auth, not client)
-      expect(tabs).toHaveLength(2);
-      expect(tabs.map(t => t.name)).toContain('Public Tab');
-      expect(tabs.map(t => t.name)).toContain('Private Tab');
-      expect(tabs.map(t => t.name)).not.toContain('Hidden Tab');
-    });
-
-    it('maps raw tab fields to StashTab shape', async () => {
-      const ctx = makeCtx(() => ({
-        tabs: [
-          { id: 'abc', n: 'Currency', type: 'CurrencyStash', i: 3, public: true },
-        ],
-      }));
-
-      const client = new StashClient(ctx);
-      const tabs = await client.getTabs('TestAccount', 'Settlers');
+      const tabs = await client.getTabs('Settlers');
 
       expect(tabs[0]).toEqual({
-        id: 'abc',
+        id: 'abc-123',
         name: 'Currency',
         type: 'CurrencyStash',
         index: 3,
@@ -78,74 +61,73 @@ describe('StashClient', () => {
       });
     });
 
-    it('returns empty array when response has no tabs', async () => {
+    it('returns empty array when response has no stashes', async () => {
       const ctx = makeCtx(() => ({}));
       const client = new StashClient(ctx);
-      const tabs = await client.getTabs('TestAccount', 'Settlers');
+      const tabs = await client.getTabs('Settlers');
       expect(tabs).toEqual([]);
     });
 
     it('caches results and avoids a second HTTP call', async () => {
       const ctx = makeCtx(() => ({
-        tabs: [{ id: 'x', n: 'My Tab', type: 'NormalStash', i: 0, public: true }],
+        stashes: [{ id: 'x', name: 'My Tab', type: 'NormalStash', index: 0 }],
       }));
       const client = new StashClient(ctx);
 
-      await client.getTabs('TestAccount', 'Settlers');
-      await client.getTabs('TestAccount', 'Settlers');
+      await client.getTabs('Settlers');
+      await client.getTabs('Settlers');
 
-      // Should only have called http.get once; the second call hits cache
       expect(ctx.http.get).toHaveBeenCalledTimes(1);
     });
 
-    it('calls the correct URL with correct params', async () => {
-      const ctx = makeCtx(() => ({ tabs: [] }));
+    it('calls the correct URL with Bearer auth', async () => {
+      const ctx = makeCtx(() => ({ stashes: [] }));
       const client = new StashClient(ctx);
 
-      await client.getTabs('MyAccount', 'Settlers');
+      await client.getTabs('Settlers');
 
       expect(ctx.http.get).toHaveBeenCalledWith(
-        'https://www.pathofexile.com/character-window/get-stash-items',
+        'https://api.pathofexile.com/stash/Settlers',
         expect.objectContaining({
-          params: expect.objectContaining({
-            accountName: 'MyAccount',
-            league: 'Settlers',
-            tabs: 1,
-            tabIndex: 0,
-            public: true,
-          }),
+          headers: { Authorization: 'Bearer test-bearer-token' },
         })
+      );
+    });
+
+    it('URL-encodes league names with spaces', async () => {
+      const ctx = makeCtx(() => ({ stashes: [] }));
+      const client = new StashClient(ctx);
+
+      await client.getTabs('Hardcore Settlers');
+
+      expect(ctx.http.get).toHaveBeenCalledWith(
+        'https://api.pathofexile.com/stash/Hardcore%20Settlers',
+        expect.anything()
       );
     });
   });
 
   describe('getTabItems', () => {
-    it('calls the API with tabs=0 and the correct tabIndex', async () => {
-      const ctx = makeCtx(() => ({ items: [] }));
+    it('calls the correct URL with stash UUID', async () => {
+      const ctx = makeCtx(() => ({ stash: { id: 'uuid-1', name: 'Tab', type: 'NormalStash', items: [] } }));
       const client = new StashClient(ctx);
 
-      await client.getTabItems('MyAccount', 'Settlers', 5);
+      await client.getTabItems('Settlers', 'uuid-1');
 
       expect(ctx.http.get).toHaveBeenCalledWith(
-        'https://www.pathofexile.com/character-window/get-stash-items',
+        'https://api.pathofexile.com/stash/Settlers/uuid-1',
         expect.objectContaining({
-          params: expect.objectContaining({
-            accountName: 'MyAccount',
-            league: 'Settlers',
-            tabs: 0,
-            tabIndex: 5,
-            public: true,
-          }),
+          headers: { Authorization: 'Bearer test-bearer-token' },
         })
       );
     });
 
     it('returns items from response', async () => {
       const fakeItem = { id: 'item1', name: '', typeLine: 'Divine Orb', baseType: 'Divine Orb', ilvl: 0, frameType: 5 };
-      const ctx = makeCtx(() => ({ items: [fakeItem] }));
+      const ctx = makeCtx(() => ({ stash: { id: 'uuid-1', name: 'Tab', type: 'NormalStash', items: [fakeItem] } }));
       const client = new StashClient(ctx);
 
-      const items = await client.getTabItems('MyAccount', 'Settlers', 0);
+      const items = await client.getTabItems('Settlers', 'uuid-1');
       expect(items).toHaveLength(1);
       expect(items[0].typeLine).toBe('Divine Orb');
     });
@@ -153,16 +135,16 @@ describe('StashClient', () => {
     it('returns empty array when response has no items', async () => {
       const ctx = makeCtx(() => ({}));
       const client = new StashClient(ctx);
-      const items = await client.getTabItems('MyAccount', 'Settlers', 0);
+      const items = await client.getTabItems('Settlers', 'uuid-1');
       expect(items).toEqual([]);
     });
 
     it('caches item results to avoid redundant fetches', async () => {
-      const ctx = makeCtx(() => ({ items: [] }));
+      const ctx = makeCtx(() => ({ stash: { items: [] } }));
       const client = new StashClient(ctx);
 
-      await client.getTabItems('MyAccount', 'Settlers', 2);
-      await client.getTabItems('MyAccount', 'Settlers', 2);
+      await client.getTabItems('Settlers', 'uuid-2');
+      await client.getTabItems('Settlers', 'uuid-2');
 
       expect(ctx.http.get).toHaveBeenCalledTimes(1);
     });

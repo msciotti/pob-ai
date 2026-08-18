@@ -1,26 +1,8 @@
 /**
- * Test utilities and shared types
+ * Test utilities shared across all plugin-pob vitest suites.
  */
 import { LuaJITRuntime } from '../runtime/luajit-runtime.js';
 import { getPobPath } from '../runtime/detector.js';
-
-export interface TestCase {
-  name: string;
-  run: (runtime: LuaJITRuntime) => Promise<void>;
-}
-
-export interface TestSuite {
-  name: string;
-  tests: TestCase[];
-}
-
-export interface TestResult {
-  suite: string;
-  test: string;
-  passed: boolean;
-  error?: string;
-  duration: number;
-}
 
 /**
  * Initialize PoB runtime for testing.
@@ -37,6 +19,7 @@ export async function initializeRuntime(): Promise<LuaJITRuntime> {
 /**
  * Load the shared test build from test-data/.
  * Creates a fresh build (preserveState: false) to ensure test isolation.
+ * Call this at the start of every test that exercises runtime state.
  */
 export async function loadTestBuild(runtime: LuaJITRuntime): Promise<void> {
   const { readFile } = await import('fs/promises');
@@ -46,20 +29,10 @@ export async function loadTestBuild(runtime: LuaJITRuntime): Promise<void> {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
 
-  // test-data lives at the repo root: packages/plugin-pob/dist/tests/ → ../../../../test-data/
+  // test-data lives at the repo root.
+  // From dist/tests/ → ../../../../test-data/ (4 levels up)
+  // From src/tests/  → ../../../../test-data/ (4 levels up, same result)
   const buildPath = join(__dirname, '..', '..', '..', '..', 'test-data', 'sample-build.txt');
   const buildXML = await readFile(buildPath, 'utf-8');
   await runtime.loadBuildFromXML(buildXML, 'Test Build');
-}
-
-export function assert(condition: boolean, message: string): void {
-  if (!condition) {
-    throw new Error(`Assertion failed: ${message}`);
-  }
-}
-
-export function assertEqual<T>(actual: T, expected: T, message?: string): void {
-  if (actual !== expected) {
-    throw new Error(message || `Expected ${String(expected)}, but got ${String(actual)}`);
-  }
 }

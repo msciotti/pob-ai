@@ -4,117 +4,82 @@
  * Tests character-level configuration including level, class,
  * ascendancy, bandit rewards, and pantheon selection.
  */
-import { TestSuite } from './test-utils.js';
-import { loadTestBuild } from './test-utils.js';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { initializeRuntime, loadTestBuild } from './test-utils.js';
+import type { LuaJITRuntime } from '../runtime/luajit-runtime.js';
 
-export const characterConfigTests: TestSuite = {
-  name: 'Character Configuration',
-  tests: [
-    {
-      name: 'Changing character level should be reflected',
-      run: async (runtime) => {
-        await loadTestBuild(runtime);
+describe('Character Configuration', () => {
+  let runtime: LuaJITRuntime;
 
-        await runtime.setCharacterLevel(50);
-        let level = await runtime.getCharacterLevel();
+  beforeAll(async () => {
+    runtime = await initializeRuntime();
+  });
 
-        if (level !== 50) {
-          throw new Error(`Expected level 50, got ${level}`);
-        }
+  afterAll(async () => {
+    await runtime.destroy();
+  });
 
-        await runtime.setCharacterLevel(90);
-        level = await runtime.getCharacterLevel();
+  it('Changing character level should be reflected', async () => {
+    await loadTestBuild(runtime);
 
-        if (level !== 90) {
-          throw new Error(`Expected level 90, got ${level}`);
-        }
+    await runtime.setCharacterLevel(50);
+    let level = await runtime.getCharacterLevel();
+    expect(level).toBe(50);
 
-        console.log(`   ✓ Character level: 50 → 90`);
-      },
-    },
+    await runtime.setCharacterLevel(90);
+    level = await runtime.getCharacterLevel();
+    expect(level).toBe(90);
+    console.log(`   Character level: 50 → 90`);
+  });
 
-    {
-      name: 'Changing character class changes base stats',
-      run: async (runtime) => {
-        await loadTestBuild(runtime);
+  it('Changing character class changes base stats', async () => {
+    await loadTestBuild(runtime);
 
-        // Marauder has high base strength
-        await runtime.setCharacterClass('MARAUDER');
-        let className = await runtime.getCharacterClass();
-        let stats = await runtime.getBuildStats();
-        const marauderStr = stats['Str'] || 0;
+    await runtime.setCharacterClass('MARAUDER');
+    let className = await runtime.getCharacterClass();
+    let stats = await runtime.getBuildStats();
+    const marauderStr = stats['Str'] || 0;
 
-        if (className !== 'Marauder') {
-          throw new Error(`Expected class 'Marauder', got '${className}'`);
-        }
+    expect(className).toBe('Marauder');
 
-        // Witch has low base strength, high int
-        await runtime.setCharacterClass('WITCH');
-        className = await runtime.getCharacterClass();
-        stats = await runtime.getBuildStats();
-        const witchStr = stats['Str'] || 0;
-        const witchInt = stats['Int'] || 0;
+    await runtime.setCharacterClass('WITCH');
+    className = await runtime.getCharacterClass();
+    stats = await runtime.getBuildStats();
+    const witchStr = stats['Str'] || 0;
+    const witchInt = stats['Int'] || 0;
 
-        if (className !== 'Witch') {
-          throw new Error(`Expected class 'Witch', got '${className}'`);
-        }
+    expect(className).toBe('Witch');
+    expect(witchStr).toBeLessThan(marauderStr);
+    console.log(`   Marauder Str: ${marauderStr}, Witch Str: ${witchStr}, Witch Int: ${witchInt}`);
+  });
 
-        if (witchStr >= marauderStr) {
-          throw new Error(
-            `Expected Witch to have lower Str than Marauder. Marauder: ${marauderStr}, Witch: ${witchStr}`
-          );
-        }
+  it('Setting ascendancy can be retrieved', async () => {
+    await loadTestBuild(runtime);
 
-        console.log(
-          `   ✓ Marauder Str: ${marauderStr}, Witch Str: ${witchStr}, Witch Int: ${witchInt}`
-        );
-      },
-    },
+    await runtime.setCharacterClass('MARAUDER');
+    await runtime.setAscendancy('Juggernaut');
 
-    {
-      name: 'Setting ascendancy can be retrieved',
-      run: async (runtime) => {
-        await loadTestBuild(runtime);
+    const ascend = await runtime.getAscendancy();
+    expect(ascend).toBe('Juggernaut');
+    console.log(`   Ascendancy set to: ${ascend}`);
+  });
 
-        await runtime.setCharacterClass('MARAUDER');
-        await runtime.setAscendancy('Juggernaut');
+  it('Bandit choice can be set', async () => {
+    await loadTestBuild(runtime);
 
-        const ascend = await runtime.getAscendancy();
-        if (ascend !== 'Juggernaut') {
-          throw new Error(`Expected Juggernaut, got ${ascend}`);
-        }
+    await runtime.setBandit('None');
+    await runtime.setBandit('Alira');
 
-        console.log(`   ✓ Ascendancy set to: ${ascend}`);
-      },
-    },
+    // No error thrown means success
+    console.log(`   Bandit set: None → Alira`);
+  });
 
-    {
-      name: 'Bandit choice can be set',
-      run: async (runtime) => {
-        await loadTestBuild(runtime);
+  it('Pantheon choices can be set', async () => {
+    await loadTestBuild(runtime);
 
-        // Kill all bandits
-        await runtime.setBandit('None');
+    await runtime.setPantheon('Soul of Lunaris', 'Soul of Gruthkul');
 
-        // Help Alira
-        await runtime.setBandit('Alira');
-
-        // Just verify no errors were thrown
-        console.log(`   ✓ Bandit set: None → Alira`);
-      },
-    },
-
-    {
-      name: 'Pantheon choices can be set',
-      run: async (runtime) => {
-        await loadTestBuild(runtime);
-
-        // Set pantheons
-        await runtime.setPantheon('Soul of Lunaris', 'Soul of Gruthkul');
-
-        // Just verify no errors were thrown
-        console.log(`   ✓ Pantheon set: Lunaris (major), Gruthkul (minor)`);
-      },
-    },
-  ],
-};
+    // No error thrown means success
+    console.log(`   Pantheon set: Lunaris (major), Gruthkul (minor)`);
+  });
+});

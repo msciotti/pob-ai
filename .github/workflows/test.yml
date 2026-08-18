@@ -86,16 +86,37 @@ jobs:
         with:
           version: 9
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Cache PoB data (LuaJIT binary + PoB source)
+        uses: actions/cache@v4
+        with:
+          path: packages/plugin-pob/pob-data
+          key: pob-data-${{ runner.os }}-luajit-v2.1-pob-master-${{ hashFiles('packages/plugin-pob/scripts/download-*.js') }}
+          restore-keys: |
+            pob-data-${{ runner.os }}-luajit-v2.1-pob-master-
 
       - name: Install build tools (for LuaJIT)
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential
 
-      - name: Build project
-        run: pnpm build
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build plugin-pob
+        run: pnpm --filter @poe-ai/plugin-pob... build
 
       - name: Run PoB runtime tests
-        run: pnpm test
+        run: pnpm --filter @poe-ai/plugin-pob test

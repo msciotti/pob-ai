@@ -43,6 +43,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build core
+        run: pnpm --filter @poe-ai/core build
+
       - name: Build project
         run: pnpm build
 
@@ -117,8 +120,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build core
+        run: pnpm --filter @poe-ai/core build
+
       - name: Build plugin-pob
-        run: pnpm --filter @poe-ai/plugin-pob... build
+        run: pnpm --filter @poe-ai/plugin-pob build
 
       - name: Run PoB runtime tests
         run: pnpm --filter @poe-ai/plugin-pob test

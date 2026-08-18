@@ -54,7 +54,6 @@ export class WikiClient {
       params: {
         action: 'query',
         prop: 'extracts',
-        exintro: 'true',
         explaintext: 'true',
         titles: title,
         format: 'json',

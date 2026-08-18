@@ -259,5 +259,17 @@ describe('WikiClient', () => {
 
       expect(page?.url).toBe('https://www.poewiki.net/wiki/Resolute_Technique');
     });
+
+    it('does not pass exintro to the API — regression for one-sentence extract bug', async () => {
+      const ctx = makeCtx();
+      const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+      httpGet.mockResolvedValue(FAKE_PAGE_RESPONSE);
+
+      const client = new WikiClient(ctx);
+      await client.getPage('Fireball');
+
+      const [, options] = httpGet.mock.calls[0];
+      expect(options?.params).not.toHaveProperty('exintro');
+    });
   });
 });

@@ -119,11 +119,11 @@ describe('PoeAiMcpServer + plugin-wiki integration', () => {
       arguments: { query: 'Fireball' },
     });
 
-    expect(result).toHaveProperty('content');
-    expect(Array.isArray(result.content)).toBe(true);
-    expect(result.content.length).toBeGreaterThan(0);
-    expect(result.content[0]).toHaveProperty('type', 'text');
-    expect(typeof (result.content[0] as { type: string; text: string }).text).toBe('string');
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(Array.isArray(content)).toBe(true);
+    expect(content.length).toBeGreaterThan(0);
+    expect(content[0]).toHaveProperty('type', 'text');
+    expect(typeof content[0].text).toBe('string');
 
     await cleanup();
   });
@@ -146,7 +146,8 @@ describe('PoeAiMcpServer + plugin-wiki integration', () => {
       arguments: { skillName: 'Fireball' },
     });
 
-    expect(result.content[0]).toHaveProperty('type', 'text');
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content[0]).toHaveProperty('type', 'text');
 
     await cleanup();
   });

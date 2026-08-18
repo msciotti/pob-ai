@@ -3,27 +3,14 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
+    name: claude-review
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
-      issues: read
-      id-token: write
 
     steps:
       - name: Checkout repository
@@ -31,26 +18,55 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Run Claude Code Review
-        id: claude-review
-        continue-on-error: true
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+      - name: Get PR diff and context
+        id: context
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} > /tmp/pr-diff.txt
+          # Truncate to ~60k chars to stay within token limits
+          truncate -s 60000 /tmp/pr-diff.txt || true
+          echo "pr_title=$(gh pr view ${{ github.event.pull_request.number }} --json title -q .title)" >> $GITHUB_OUTPUT
 
-            Review this PR for bugs, security issues, and test coverage. Keep comments brief and actionable:
-            - Focus on must-fix issues (bugs, security, broken functionality)
-            - Flag nice-to-have improvements separately
-            - Use bullet points, not paragraphs
-            - Prioritize: 🔴 Critical → 🟡 Important → 🔵 Nice-to-have
-            - Skip style/convention feedback unless it affects functionality
+      - name: Review with Claude API
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          CLAUDE_MD=$(cat CLAUDE.md 2>/dev/null || echo "No CLAUDE.md found")
+          DIFF=$(cat /tmp/pr-diff.txt)
 
-            Use the repository's CLAUDE.md for context. Use `gh pr comment` to post your review.
+          PAYLOAD=$(jq -n \
+            --arg claude_md "$CLAUDE_MD" \
+            --arg diff "$DIFF" \
+            --arg title "${{ steps.context.outputs.pr_title }}" \
+            '{
+              model: "claude-opus-4-6",
+              max_tokens: 2048,
+              messages: [{
+                role: "user",
+                content: ("You are reviewing a pull request for the poe-ai project.\n\nProject context from CLAUDE.md:\n" + $claude_md + "\n\nPR title: " + $title + "\n\nDiff:\n```\n" + $diff + "\n```\n\nReview this PR for bugs, security issues, and missing test coverage. Be brief and actionable:\n- Focus on must-fix issues (bugs, security, broken functionality)\n- Flag nice-to-have improvements separately\n- Use bullet points, not paragraphs\n- Prioritize: 🔴 Critical → 🟡 Important → 🔵 Nice-to-have\n- Skip style/convention feedback unless it affects functionality\n- If there are no issues, say so briefly.")
+              }]
+            }')
 
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
-          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)" --max-turns 10'
+          RESPONSE=$(curl -sf https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$PAYLOAD")
 
+          echo "$RESPONSE" | jq -r '.content[0].text' > /tmp/review.txt
+          echo "Review response saved"
+
+      - name: Post review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REVIEW=$(cat /tmp/review.txt)
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "## Claude Code Review
+
+${REVIEW}
+
+---
+*🤖 Reviewed by claude-opus-4-6*"

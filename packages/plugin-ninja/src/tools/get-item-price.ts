@@ -9,6 +9,7 @@ const ITEM_CATEGORIES = [
   'UniqueAccessory',
   'UniqueJewel',
   'UniqueFlask',
+  'Map',
   'Currency',
   'Fragment',
   'DivinationCard',

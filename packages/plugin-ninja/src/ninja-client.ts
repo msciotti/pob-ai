@@ -18,6 +18,7 @@ const AUTO_DETECT_ORDER: ItemCategory[] = [
   'UniqueAccessory',
   'UniqueJewel',
   'UniqueFlask',
+  'Map',
   'Currency',
   'Fragment',
   'DivinationCard',

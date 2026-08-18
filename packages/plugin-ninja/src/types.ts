@@ -8,6 +8,7 @@ export type ItemCategory =
   | 'UniqueAccessory'
   | 'UniqueJewel'
   | 'UniqueFlask'
+  | 'Map'
   | 'Currency'
   | 'Fragment'
   | 'DivinationCard'

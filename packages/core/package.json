@@ -26,6 +26,12 @@
     "express": "^5.1.0",
     "zod": "3"
   },
+  "optionalDependencies": {
+    "@poe-ai/plugin-pob": "workspace:*",
+    "@poe-ai/plugin-wiki": "workspace:*",
+    "@poe-ai/plugin-ninja": "workspace:*",
+    "@poe-ai/plugin-wealth": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.9.3",
     "vitest": "^4.0.13",

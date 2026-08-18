@@ -19,7 +19,6 @@
     "test:mcp:coverage": "vitest run --coverage",
     "test:all": "pnpm test:mcp && pnpm test",
     "mvp": "pnpm build && node dist/mvp-test.js",
-    "postinstall": "node scripts/download-pob.js && node scripts/download-luajit.js",
     "workspace:build": "pnpm -r build",
     "workspace:test": "pnpm -r test"
   },

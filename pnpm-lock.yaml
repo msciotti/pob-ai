@@ -63,6 +63,19 @@ importers:
       zod:
         specifier: '3'
         version: 3.25.76
+    optionalDependencies:
+      '@poe-ai/plugin-ninja':
+        specifier: workspace:*
+        version: link:../plugin-ninja
+      '@poe-ai/plugin-pob':
+        specifier: workspace:*
+        version: link:../plugin-pob
+      '@poe-ai/plugin-wealth':
+        specifier: workspace:*
+        version: link:../plugin-wealth
+      '@poe-ai/plugin-wiki':
+        specifier: workspace:*
+        version: link:../plugin-wiki
     devDependencies:
       '@types/express':
         specifier: ^5.0.5

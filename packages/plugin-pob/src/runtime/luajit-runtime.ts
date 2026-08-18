@@ -9,6 +9,29 @@ import type { PobRuntime } from '@poe-ai/core';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+export interface BuildProfile {
+  stats: Record<string, number>;
+  keystones: string[];
+  notables: string[];
+  uniqueItems: Array<{ slot: string; name: string }>;
+  mainSkill: {
+    label: string;
+    slot?: string;
+    gems: Array<{ name: string; level: number; quality: number; enabled: boolean }>;
+  } | null;
+}
+
+function asBuildProfile(raw: unknown): BuildProfile {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  return {
+    stats: (r['stats'] as Record<string, number>) ?? {},
+    keystones: (r['keystones'] as string[]) ?? [],
+    notables: (r['notables'] as string[]) ?? [],
+    uniqueItems: (r['uniqueItems'] as Array<{ slot: string; name: string }>) ?? [],
+    mainSkill: (r['mainSkill'] as BuildProfile['mainSkill']) ?? null,
+  };
+}
+
 /**
  * LuaJIT runtime for executing PoB via subprocess.
  * Implements PobRuntime so it can be stored on PluginContext.
@@ -315,12 +338,40 @@ export class LuaJITRuntime implements PobRuntime {
     };
   }
 
-  async getAllocatedNodes(): Promise<Array<{ id: string; name: string; type: string }>> {
+  async getAllocatedNodes(): Promise<
+    Array<{ id: string; name: string; type: string; isKeystone: boolean; isNotable: boolean }>
+  > {
     const response = await this.sendCommand('getAllocatedNodes');
     if (!response['success']) {
       throw new Error((response['error'] as string) || 'Failed to get allocated nodes');
     }
-    return (response['nodes'] as Array<{ id: string; name: string; type: string }>) || [];
+    return (
+      response['nodes'] as Array<{
+        id: string;
+        name: string;
+        type: string;
+        isKeystone: boolean;
+        isNotable: boolean;
+      }>
+    ) || [];
+  }
+
+  async getBuildMeta(): Promise<{
+    bandit: string;
+    pantheonMajorGod: string;
+    pantheonMinorGod: string;
+    characterLevel: number;
+  }> {
+    const response = await this.sendCommand('getBuildMeta', {});
+    if (!response['success']) {
+      throw new Error((response['error'] as string) || 'Failed to get build meta');
+    }
+    return {
+      bandit: response['bandit'] as string,
+      pantheonMajorGod: response['pantheonMajorGod'] as string,
+      pantheonMinorGod: response['pantheonMinorGod'] as string,
+      characterLevel: response['characterLevel'] as number,
+    };
   }
 
   async findPathToNode(nodeName: string): Promise<{
@@ -548,5 +599,24 @@ export class LuaJITRuntime implements PobRuntime {
       throw new Error((response['error'] as string) || 'Failed to get all config');
     }
     return (response['config'] as Record<string, boolean | string | number>) || {};
+  }
+
+  /**
+   * Compare the currently loaded build against another build from a code.
+   * Returns a full profile for both builds (stats, keystones, notables, unique items,
+   * main skill). The primary build is replaced by the comparison build after this call —
+   * reload it via load_build if needed.
+   */
+  async compareBuilds(code: string, label?: string): Promise<{
+    primary: BuildProfile;
+    compare: BuildProfile;
+    primaryReplaced: boolean;
+  }> {
+    const response = await this.sendCommand('compareBuilds', { code, label });
+    return {
+      primary: asBuildProfile(response['primary']),
+      compare: asBuildProfile(response['compare']),
+      primaryReplaced: (response['primaryReplaced'] as boolean) || false,
+    };
   }
 }

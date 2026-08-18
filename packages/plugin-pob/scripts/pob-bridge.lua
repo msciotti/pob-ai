@@ -50,6 +50,43 @@ print(json.encode({status = "loading", message = "Loading PoB..."}))
 io.flush()
 dofile(pobPath .. "/HeadlessWrapper.lua")
 
+-- Override HeadlessWrapper's Inflate stub with a real zlib implementation via LuaJIT FFI.
+-- HeadlessWrapper defines Inflate as a TODO stub returning "". PoB build codes are
+-- zlib-compressed (magic bytes 0x78 0xDA, standard zlib format), not raw deflate.
+do
+  local ffi = require("ffi")
+  local zlib_name = (package.config:sub(1,1) == "\\") and "zlib1" or "z"
+  local ok, zlib = pcall(ffi.load, zlib_name)
+  if ok then
+    ffi.cdef[[
+      typedef unsigned long uLong;
+      typedef unsigned char Bytef;
+      int uncompress(Bytef *dest, uLong *destLen, const Bytef *source, uLong sourceLen);
+    ]]
+    function Inflate(data)
+      if not data or #data == 0 then return "" end
+      local src = ffi.cast("const unsigned char *", data)
+      local srcLen = #data
+      -- Try with progressively larger output buffers (builds expand ~30-500x)
+      local lastErr = -99
+      for _, mult in ipairs({60, 120, 250, 500, 1000}) do
+        local destLen = ffi.new("unsigned long[1]", srcLen * mult)
+        local dest = ffi.new("unsigned char[?]", destLen[0])
+        lastErr = zlib.uncompress(dest, destLen, src, srcLen)
+        if lastErr == 0 then
+          return ffi.string(dest, destLen[0])
+        end
+        -- Z_BUF_ERROR (-5) means buffer too small — keep trying larger
+        -- Any other error (e.g. Z_DATA_ERROR -3) won't improve with a larger buffer
+        if lastErr ~= -5 then break end
+      end
+      error("zlib uncompress failed (code=" .. lastErr .. ") for data of length " .. srcLen)
+    end
+  else
+    io.stderr:write("[pob-bridge] WARNING: zlib FFI unavailable — build code import disabled\n")
+  end
+end
+
 -- Initialize inputEvents as empty table for headless mode
 inputEvents = {}
 
@@ -364,16 +401,12 @@ function api.importFromCode(params)
 
   -- Load the decoded XML. HeadlessWrapper's loadBuildFromXML() calls SetMode()
   -- and OnFrame(), which creates and initializes a new build instance.
-  -- The global 'build' variable is already set by HeadlessWrapper.
   loadBuildFromXML(xmlText, name)
 
-  -- Convert to modifiable build (following PoB's test pattern)
-  local convertResult = convertToModifiableBuild(preserveState)
-  if not convertResult.success then
-    return {success = false, error = "Failed to convert build: " .. (convertResult.error or "unknown error")}
-  end
+  -- Update global 'build' reference in case SetMode replaced the table.
+  build = launch.main.modes["BUILD"]
 
-  return {success = true, message = "Build imported and made modifiable: " .. name}
+  return {success = true, message = "Build imported: " .. name}
 end
 
 function api.getStats()
@@ -444,7 +477,9 @@ function api.getAllocatedNodes()
     table.insert(allocatedNodes, {
       id = node.id,
       name = node.name or "(unnamed)",
-      type = node.type
+      type = node.type,
+      isKeystone = node.isKeystone or false,
+      isNotable = node.isNotable or false,
     })
   end
 
@@ -1377,6 +1412,20 @@ function api.getConfig(params)
   return {success = true, var = var, value = value}
 end
 
+-- Get build metadata: bandit choice, pantheon gods, and character level
+function api.getBuildMeta(params)
+  if not build then
+    return {success = false, error = "No build loaded"}
+  end
+  return {
+    success = true,
+    bandit = build.bandit or "None",
+    pantheonMajorGod = build.pantheonMajorGod or "None",
+    pantheonMinorGod = build.pantheonMinorGod or "None",
+    characterLevel = build.characterLevel or 1,
+  }
+end
+
 -- Get all configuration values
 function api.getAllConfig(params)
   if not build or not build.configTab then
@@ -1395,6 +1444,132 @@ function api.getAllConfig(params)
   end
 
   return {success = true, config = configs}
+end
+
+-- Compare the current loaded build against a build from a pastebin/pobb.in code.
+-- Snapshot a loaded build into a profile: stats, keystones, notables, unique items, main skill.
+local function getBuildProfile(b)
+  local profile = {
+    stats = {},
+    keystones = {},
+    notables = {},
+    uniqueItems = {},
+    mainSkill = nil,
+  }
+
+  -- Numeric output stats
+  if b.calcsTab and b.calcsTab.mainOutput then
+    for key, value in pairs(b.calcsTab.mainOutput) do
+      if type(value) == "number" then profile.stats[key] = value end
+    end
+  end
+
+  -- Keystones and notables from allocated passive nodes
+  if b.spec and b.spec.allocNodes then
+    for _, node in pairs(b.spec.allocNodes) do
+      local name = node.dn or node.name
+      if name and name ~= "" then
+        if node.type == "Keystone" then
+          table.insert(profile.keystones, name)
+        elseif node.type == "Notable" then
+          table.insert(profile.notables, name)
+        end
+      end
+    end
+    table.sort(profile.keystones)
+    table.sort(profile.notables)
+  end
+
+  -- Unique items equipped in each slot
+  if b.itemsTab and b.itemsTab.activeItemSet and b.itemsTab.items then
+    for slotName, slot in pairs(b.itemsTab.activeItemSet) do
+      if type(slot) == "table" and slot.selItemId and slot.selItemId > 0 then
+        local item = b.itemsTab.items[slot.selItemId]
+        if item and item.rarity == "UNIQUE" and item.name then
+          table.insert(profile.uniqueItems, { slot = slotName, name = item.name })
+        end
+      end
+    end
+    table.sort(profile.uniqueItems, function(a, c) return a.slot < c.slot end)
+  end
+
+  -- Main active skill group (the one PoB uses for DPS)
+  if b.skillsTab and b.skillsTab.socketGroupList then
+    local mainIdx = b.mainSocketGroup or 1
+    local group = b.skillsTab.socketGroupList[mainIdx]
+    if group then
+      local gems = {}
+      for _, gem in ipairs(group.gemList or {}) do
+        local gname = gem.nameSpec or gem.name
+        if gname and gname ~= "" then
+          table.insert(gems, {
+            name    = gname,
+            level   = gem.level or 1,
+            quality = gem.quality or 0,
+            enabled = (gem.enabled ~= false),
+          })
+        end
+      end
+      profile.mainSkill = {
+        label = group.label or ("Skill Group " .. mainIdx),
+        slot  = group.slot,
+        gems  = gems,
+      }
+    end
+  end
+
+  return profile
+end
+
+-- Captures primary build profile first, then loads the comparison build (which replaces
+-- the primary). Returns profiles for both so the caller can diff them.
+-- NOTE: The primary build is NOT restored after comparison — reload it if needed.
+function api.compareBuilds(params)
+  if not build or not build.calcsTab or not build.calcsTab.mainOutput then
+    return {success = false, error = "No build loaded. Use load_build first."}
+  end
+
+  local code = params.code
+  if not code then
+    return {success = false, error = "code parameter required"}
+  end
+
+  -- 1. Snapshot primary build before any changes
+  local primary = getBuildProfile(build)
+
+  -- 2. Decode comparison build code (same decode path as importFromCode)
+  local buf = code:gsub("-", "+"):gsub("_", "/")
+  local ok, decoded = pcall(function() return common.base64.decode(buf) end)
+  if not ok then
+    return {success = false, error = "Failed to base64-decode build code"}
+  end
+
+  local ok2, xmlText = pcall(Inflate, decoded)
+  if not ok2 then
+    return {success = false, error = "Failed to inflate build code: " .. tostring(xmlText)}
+  end
+
+  -- 3. Load comparison build — replaces the primary build in the global 'build'
+  local label = params.label or "Comparison Build"
+  local ok3, loadErr = pcall(loadBuildFromXML, xmlText, label)
+  if not ok3 then
+    return {success = false, error = "Failed to load comparison build: " .. tostring(loadErr)}
+  end
+  build = launch.main.modes["BUILD"]
+
+  if build.calcsTab and build.calcsTab.BuildOutput then
+    build.calcsTab:BuildOutput()
+  end
+
+  -- 4. Snapshot comparison build
+  local compare = getBuildProfile(build)
+
+  return {
+    success = true,
+    primary = primary,
+    compare = compare,
+    primaryReplaced = true,
+  }
 end
 
 -- Debug: Execute arbitrary Lua code (for testing only)

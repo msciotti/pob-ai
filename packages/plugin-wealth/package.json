@@ -1,0 +1,22 @@
+{
+  "name": "@poe-ai/plugin-wealth",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@poe-ai/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@poe-ai/core": "workspace:*",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13",
+    "zod": "3"
+  }
+}

@@ -100,6 +100,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Cache PoB data (LuaJIT binary + PoB source)
+        id: pob-cache
         uses: actions/cache@v4
         with:
           path: packages/plugin-pob/pob-data
@@ -108,6 +109,7 @@ jobs:
             pob-data-${{ runner.os }}-luajit-v2.1-pob-master-
 
       - name: Install build tools (for LuaJIT)
+        if: steps.pob-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential

@@ -115,3 +115,73 @@ describe('NinjaClient.getItemPrice', () => {
     expect(result).toBeNull();
   });
 });
+
+describe('NinjaClient — endpoint selection and field mapping', () => {
+  it('Currency category uses currencyoverview URL', async () => {
+    const ctx = makeCtx();
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockResolvedValue({ lines: [{ name: 'Divine Orb', chaosValue: 200, divineValue: 1, listingCount: 500 }] });
+
+    const client = new NinjaClient(ctx);
+    await client.getItemPrice('Divine Orb', 'Currency', 'Standard');
+
+    expect(httpGet).toHaveBeenCalledWith(
+      expect.stringContaining('currencyoverview'),
+      expect.any(Object)
+    );
+  });
+
+  it('Fragment category uses currencyoverview URL', async () => {
+    const ctx = makeCtx();
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockResolvedValue({ lines: [{ name: 'Sacrifice at Midnight', chaosValue: 5, divineValue: 0, listingCount: 200 }] });
+
+    const client = new NinjaClient(ctx);
+    await client.getItemPrice('Sacrifice at Midnight', 'Fragment', 'Standard');
+
+    expect(httpGet).toHaveBeenCalledWith(
+      expect.stringContaining('currencyoverview'),
+      expect.any(Object)
+    );
+  });
+
+  it('UniqueArmour uses itemoverview URL', async () => {
+    const ctx = makeCtx();
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockResolvedValue({ lines: [{ name: "Kaom's Heart", chaosValue: 50, divineValue: 0.3, listingCount: 100 }] });
+
+    const client = new NinjaClient(ctx);
+    await client.getItemPrice("Kaom's Heart", 'UniqueArmour', 'Standard');
+
+    expect(httpGet).toHaveBeenCalledWith(
+      expect.stringContaining('itemoverview'),
+      expect.any(Object)
+    );
+  });
+
+  it('uses count field when listingCount is absent', async () => {
+    const ctx = makeCtx();
+    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      lines: [{ name: 'Divine Orb', chaosValue: 200, count: 42 }],
+    });
+
+    const client = new NinjaClient(ctx);
+    const result = await client.getItemPrice('Divine Orb', 'Currency', 'Standard');
+
+    expect(result).not.toBeNull();
+    expect(result!.listingCount).toBe(42);
+  });
+
+  it('divineValue defaults to 0 when absent', async () => {
+    const ctx = makeCtx();
+    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      lines: [{ name: 'Divine Orb', chaosValue: 200, listingCount: 10 }],
+    });
+
+    const client = new NinjaClient(ctx);
+    const result = await client.getItemPrice('Divine Orb', 'Currency', 'Standard');
+
+    expect(result).not.toBeNull();
+    expect(result!.divineValue).toBe(0);
+  });
+});

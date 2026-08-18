@@ -104,4 +104,38 @@ describe('get_item_price tool', () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.error).toContain('Timeout');
   });
+
+  it('explicit league param overrides ctx.leagueState', async () => {
+    const ctx = makeCtx('Standard');
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockResolvedValue({ lines: [] });
+
+    await getItemPriceTool.handler(
+      { itemName: 'X', category: 'Currency', league: 'Hardcore' },
+      ctx
+    );
+
+    expect(httpGet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        params: expect.objectContaining({ league: 'Hardcore' }),
+      })
+    );
+  });
+
+  it('result includes valid ISO dataAsOf timestamp', async () => {
+    const ctx = makeCtx();
+    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue({
+      lines: [{ name: "Kaom's Heart", chaosValue: 50, divineValue: 0.3, listingCount: 100 }],
+    });
+
+    const result = await getItemPriceTool.handler(
+      { itemName: "Kaom's Heart", category: 'UniqueArmour' },
+      ctx
+    );
+
+    expect(result.isError).toBeFalsy();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(new Date(parsed.dataAsOf).toISOString()).toBe(parsed.dataAsOf);
+  });
 });

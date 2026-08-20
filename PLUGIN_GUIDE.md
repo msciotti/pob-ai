@@ -206,7 +206,7 @@ pnpm download-repoe          # skips re-download if already present
 pnpm download-repoe --force  # force a refresh
 ```
 
-into a gitignored `repoe-data/` directory at the repo root. If that directory is missing, every loader rejects with a clear error telling the user to run `pnpm download-repoe` — catch it (or let it propagate as a tool error) rather than assuming the data is always there. The directory can be relocated via the `POE_AI_REPOE_DIR` env var (handy for tests — point it at fixture JSON instead of the real multi-MB downloads).
+into a gitignored `repoe-data/` directory inside `packages/game-data/` (so it travels with the package in a real install, not just this monorepo checkout). If that directory is missing, every loader rejects with a clear error telling the user to run `pnpm download-repoe` — catch it (or let it propagate as a tool error) rather than assuming the data is always there. The directory can be relocated via the `POE_AI_REPOE_DIR` env var (handy for tests — point it at fixture JSON instead of the real multi-MB downloads). `poe-ai init` runs this automatically when `@poe-ai/plugin-crafting` is one of the enabled plugins — see packages/core's CLI.
 
 Because this is local file data, there's no HTTP round-trip to cache against — skip `ctx.cache`/TTLs entirely for it. If you still key a cache by something derived from game data (e.g. a computed mod-lookup result), use `getGameDataVersion()` as the patch component instead of `ctx.leagueState.patchVersion`, since the two can drift independently.
 

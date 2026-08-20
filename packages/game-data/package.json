@@ -9,12 +9,18 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./scripts/download-repoe.js": "./scripts/download-repoe.js"
   },
+  "files": [
+    "dist",
+    "scripts"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "download-repoe": "node scripts/download-repoe.js"
   },
   "engines": {
     "node": ">=18.0.0"

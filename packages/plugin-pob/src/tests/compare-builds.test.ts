@@ -28,7 +28,7 @@ describe('compareBuilds', () => {
 
   it.skipIf(!!process.env['SKIP_NETWORK_TESTS'])(
     'compareBuilds returns the correct shape',
-    async () => {
+    async (ctx) => {
       await loadTestBuild(runtime);
 
       // Fetch the raw build code from pastebin
@@ -41,7 +41,25 @@ describe('compareBuilds', () => {
       }
       const rawCode = await response.text();
 
-      const result = await runtime.compareBuilds(rawCode, 'Test Comparison');
+      // COMPARE_PASTEBIN_CODE is a real, immutable pastebin snapshot pinned to
+      // whatever patch it was saved on — it predates the tree-version prune in
+      // scripts/download-pob.js (only the current patch's TreeData ships by
+      // default) and will keep falling further behind every future patch.
+      // Skip rather than fail when that's the reason it can't load; re-run
+      // with POE_AI_ALL_TREES=1 (see plugin-pob/scripts/download-pob.js) to
+      // exercise this test against the full historical tree set.
+      let result;
+      try {
+        result = await runtime.compareBuilds(rawCode, 'Test Comparison');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes('pruned from this install')) {
+          console.warn(`   Skipping: ${message}`);
+          ctx.skip();
+          return;
+        }
+        throw err;
+      }
 
       // Top-level shape
       expect(result).toHaveProperty('primary');

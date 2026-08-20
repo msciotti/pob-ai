@@ -21,7 +21,7 @@
     "mvp": "pnpm build && node dist/mvp-test.js",
     "download-repoe": "node scripts/download-repoe.js",
     "workspace:build": "pnpm -r build",
-    "workspace:test": "pnpm -r test"
+    "workspace:test": "pnpm --filter '!@poe-ai/integration-tests' -r test"
   },
   "keywords": [
     "mcp",

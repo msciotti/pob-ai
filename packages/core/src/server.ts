@@ -116,12 +116,16 @@ export class PoeAiMcpServer {
     });
     this._registerPluginTools(mcpServer, this.plugins, this.ctx!);
 
+    // Only track (and wire cleanup for) a server once it's actually connected — if
+    // connect() throws, there's nothing to close and nothing that will ever fire
+    // onclose, so adding it beforehand would leak the entry in connectedServers
+    // forever.
+    await mcpServer.connect(transport);
+
     this.connectedServers.add(mcpServer);
     mcpServer.server.onclose = () => {
       this.connectedServers.delete(mcpServer);
     };
-
-    await mcpServer.connect(transport);
   }
 
   /**

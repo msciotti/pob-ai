@@ -279,4 +279,104 @@ describe('get_stash_value tool', () => {
     expect(data.success).toBe(false);
     expect(data.error).toContain('Network error');
   });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Graceful degradation when poe.ninja pricing is unavailable
+  // ──────────────────────────────────────────────────────────────────────────
+
+  describe('pricing unavailable', () => {
+    it('still returns stash contents/quantities (not isError) when getDivinePrice throws', async () => {
+      mockGetTabs.mockResolvedValue([makeTab(0)]);
+      mockGetTabItems.mockResolvedValue([makeCurrencyItem('Chaos Orb', 10)]);
+      mockGetDivinePrice.mockRejectedValue(new Error('poe.ninja is down'));
+
+      const ctx = makeCtx();
+      const result = await getStashValueTool.handler({}, ctx);
+
+      expect(result.isError).toBeFalsy();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.pricingAvailable).toBe(false);
+      expect(data.pricingWarning).toContain('poe.ninja is down');
+      // priceItem should never even be attempted once pricing is known-down
+      expect(mockPriceItem).not.toHaveBeenCalled();
+    });
+
+    it('reports quantities for items scanned while pricing is unavailable', async () => {
+      mockGetTabs.mockResolvedValue([makeTab(0, 'Currency Tab')]);
+      mockGetTabItems.mockResolvedValue([makeCurrencyItem('Chaos Orb', 10)]);
+      mockGetDivinePrice.mockRejectedValue(new Error('timeout'));
+
+      const ctx = makeCtx();
+      const result = await getStashValueTool.handler({}, ctx);
+
+      const data = parseResult(result);
+      expect(data.totalChaosValue).toBe(0);
+      expect(data.unpricedItems).toBe(1);
+      expect(data.unpricedItemDetails).toHaveLength(1);
+      expect(data.unpricedItemDetails[0]).toMatchObject({
+        typeLine: 'Chaos Orb',
+        stackSize: 10,
+        tabName: 'Currency Tab',
+      });
+    });
+
+    it('degrades to quantities-only for remaining items when pricing fails mid-scan', async () => {
+      mockGetTabs.mockResolvedValue([makeTab(0)]);
+      mockGetTabItems.mockResolvedValue([
+        makeCurrencyItem('Divine Orb', 1),
+        makeCurrencyItem('Chaos Orb', 5),
+      ]);
+      mockGetDivinePrice.mockResolvedValue(200);
+      mockPriceItem
+        .mockResolvedValueOnce({ chaosValue: 200, category: 'Currency' })
+        .mockRejectedValueOnce(new Error('poe.ninja timed out'));
+
+      const ctx = makeCtx();
+      const result = await getStashValueTool.handler({}, ctx);
+
+      expect(result.isError).toBeFalsy();
+      const data = parseResult(result);
+      expect(data.success).toBe(true);
+      expect(data.pricingAvailable).toBe(false);
+      expect(data.pricingWarning).toContain('poe.ninja timed out');
+      expect(data.totalChaosValue).toBe(200); // only the first item priced
+      expect(data.unpricedItems).toBe(1);
+      expect(data.unpricedItemDetails).toHaveLength(1);
+      expect(data.unpricedItemDetails[0].typeLine).toBe('Chaos Orb');
+    });
+
+    it('reports pricingAvailable: true and omits pricingWarning/unpricedItemDetails on a normal scan', async () => {
+      mockGetTabs.mockResolvedValue([makeTab(0)]);
+      mockGetTabItems.mockResolvedValue([makeCurrencyItem('Divine Orb', 1)]);
+      mockPriceItem.mockResolvedValue({ chaosValue: 200, category: 'Currency' });
+
+      const ctx = makeCtx();
+      const result = await getStashValueTool.handler({}, ctx);
+
+      const data = parseResult(result);
+      expect(data.pricingAvailable).toBe(true);
+      expect(data.pricingWarning).toBeUndefined();
+      expect(data.unpricedItemDetails).toBeUndefined();
+    });
+
+    it('does not list quantities for items pricing legitimately skips (rares) when pricing IS available', async () => {
+      mockGetTabs.mockResolvedValue([makeTab(0)]);
+      const rareItem: RawStashItem = {
+        id: 'rare1', name: 'Dreadful Salvation', typeLine: 'Hubris Circlet',
+        baseType: 'Hubris Circlet', ilvl: 86, frameType: 2,
+        extended: { category: 'armour' },
+      };
+      mockGetTabItems.mockResolvedValue([rareItem]);
+      mockPriceItem.mockResolvedValue(null); // not a pricing failure — just untracked
+
+      const ctx = makeCtx();
+      const result = await getStashValueTool.handler({}, ctx);
+
+      const data = parseResult(result);
+      expect(data.pricingAvailable).toBe(true);
+      expect(data.unpricedItems).toBe(1);
+      expect(data.unpricedItemDetails).toBeUndefined();
+    });
+  });
 });

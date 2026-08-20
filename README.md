@@ -125,6 +125,16 @@ pnpm --filter @poe-ai/plugin-pob test
 | `plugins` | string[] | Ordered list of plugin package names to load |
 | `cacheTtlMs` | number | Optional. Cache TTL in milliseconds (default: 5 minutes) |
 
+Environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `POE_WIKI_BASE_URL` | Override plugin-wiki's base URL (default `https://www.poewiki.net`). poewiki.net's Cloudflare protection 403s datacenter IPs — point this at a relay (e.g. a Cloudflare Worker forwarding to poewiki.net) for hosted deployments. |
+| `POE_WIKI_API_URL` | Override the MediaWiki API endpoint (default `https://www.poewiki.net/api.php`). |
+| `POE_AI_ALL_TREES` | Set to `1` to keep every historical passive-tree version when downloading PoB data (needed for loading builds saved on old patches). |
+| `POE_AI_REPOE_DIR` | Override where `@poe-ai/game-data` looks for downloaded RePoE data. |
+| `POE_SESSION_ID` / `POE_CF_CLEARANCE` | Session cookies for plugin-wealth's stash access (until GGG OAuth registrations reopen). |
+
 ## Community Plugins
 
 Community plugins use the naming convention `poe-ai-plugin-*` (unprefixed, no `@poe-ai/` scope). To load one, install it and add it to your `plugins` array:

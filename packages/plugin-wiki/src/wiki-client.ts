@@ -14,8 +14,10 @@ export interface WikiPage {
 }
 
 export class WikiClient {
-  private readonly baseUrl = 'https://www.poewiki.net';
-  private readonly apiUrl = 'https://www.poewiki.net/api.php';
+  // Overridable so hosted deployments can point at a relay — poewiki.net's
+  // Cloudflare protection 403s requests from datacenter IP ranges.
+  private readonly baseUrl = process.env['POE_WIKI_BASE_URL'] ?? 'https://www.poewiki.net';
+  private readonly apiUrl = process.env['POE_WIKI_API_URL'] ?? 'https://www.poewiki.net/api.php';
 
   constructor(private ctx: PluginContext) {}
 

@@ -273,3 +273,36 @@ describe('WikiClient', () => {
     });
   });
 });
+
+describe('endpoint overrides', () => {
+  beforeEach(() => {
+    delete process.env['POE_WIKI_API_URL'];
+    delete process.env['POE_WIKI_BASE_URL'];
+  });
+
+  it('uses POE_WIKI_API_URL when set', async () => {
+    process.env['POE_WIKI_API_URL'] = 'https://relay.example.com/api.php';
+    const ctx = makeCtx();
+    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue({ query: { search: [] } });
+
+    await new WikiClient(ctx).search('Fireball');
+
+    expect(ctx.http.get).toHaveBeenCalledWith(
+      'https://relay.example.com/api.php',
+      expect.anything()
+    );
+    delete process.env['POE_WIKI_API_URL'];
+  });
+
+  it('defaults to poewiki.net when no override is set', async () => {
+    const ctx = makeCtx();
+    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue({ query: { search: [] } });
+
+    await new WikiClient(ctx).search('Fireball');
+
+    expect(ctx.http.get).toHaveBeenCalledWith(
+      'https://www.poewiki.net/api.php',
+      expect.anything()
+    );
+  });
+});

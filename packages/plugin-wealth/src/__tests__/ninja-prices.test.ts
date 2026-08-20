@@ -321,3 +321,142 @@ describe('NinjaPriceCache', () => {
     });
   });
 });
+
+describe('NinjaPriceCache — stale snapshot version retry', () => {
+  function notFoundError(): Error {
+    const err = new Error('Request failed with status code 404') as Error & {
+      response: { status: number };
+    };
+    err.response = { status: 404 };
+    return err;
+  }
+
+  it('invalidates cached index-state and retries once when the economy call 404s on a stale version', async () => {
+    const ctx = makeCtx();
+    let indexStateCalls = 0;
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockImplementation((url: string) => {
+      if (url.includes('index-state')) {
+        indexStateCalls++;
+        const version = indexStateCalls === 1 ? 'v-standard-stale' : 'v-standard-fresh';
+        return Promise.resolve({
+          economyLeagues: [{ name: 'Standard', url: 'standard', displayName: 'Standard' }],
+          oldEconomyLeagues: [],
+          snapshotVersions: [{ url: 'standard', type: 'exp', version }],
+        });
+      }
+      if (url.includes('currency/overview')) {
+        if (url.includes('v-standard-stale')) throw notFoundError();
+        return Promise.resolve({
+          lines: [{ currencyTypeName: 'Divine Orb', chaosEquivalent: 200, receive: { listing_count: 50 } }],
+        });
+      }
+      throw new Error(`Unmocked URL: ${url}`);
+    });
+
+    const cache = new NinjaPriceCache(ctx);
+    const map = await cache.getPriceMap('Currency', 'Standard');
+
+    expect(map.get('divine orb')?.chaosValue).toBe(200);
+    expect(indexStateCalls).toBe(2); // initial + retry after invalidating cached index-state
+    const currencyCalls = httpGet.mock.calls.filter((c: any[]) => c[0].includes('currency/overview'));
+    expect(currencyCalls).toHaveLength(2);
+    expect(currencyCalls[1][0]).toContain('v-standard-fresh');
+  });
+
+  it('does not retry more than once — a second 404 on the fresh version propagates', async () => {
+    const ctx = makeCtx();
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockImplementation((url: string) => {
+      if (url.includes('index-state')) {
+        return Promise.resolve({
+          economyLeagues: [{ name: 'Standard', url: 'standard', displayName: 'Standard' }],
+          oldEconomyLeagues: [],
+          snapshotVersions: [{ url: 'standard', type: 'exp', version: 'v-always-stale' }],
+        });
+      }
+      if (url.includes('currency/overview')) throw notFoundError();
+      throw new Error(`Unmocked URL: ${url}`);
+    });
+
+    const cache = new NinjaPriceCache(ctx);
+    await expect(cache.getPriceMap('Currency', 'Standard')).rejects.toThrow();
+
+    const currencyCalls = httpGet.mock.calls.filter((c: any[]) => c[0].includes('currency/overview'));
+    expect(currencyCalls).toHaveLength(2); // initial attempt + exactly one retry
+  });
+
+  it('does not retry on non-404 errors (e.g. timeouts) — propagates immediately', async () => {
+    const ctx = makeCtx();
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockImplementation((url: string) => {
+      if (url.includes('index-state')) {
+        return Promise.resolve({
+          economyLeagues: [{ name: 'Standard', url: 'standard', displayName: 'Standard' }],
+          oldEconomyLeagues: [],
+          snapshotVersions: [{ url: 'standard', type: 'exp', version: 'v-standard-1' }],
+        });
+      }
+      if (url.includes('currency/overview')) throw new Error('socket hang up');
+      throw new Error(`Unmocked URL: ${url}`);
+    });
+
+    const cache = new NinjaPriceCache(ctx);
+    await expect(cache.getPriceMap('Currency', 'Standard')).rejects.toThrow('socket hang up');
+
+    const currencyCalls = httpGet.mock.calls.filter((c: any[]) => c[0].includes('currency/overview'));
+    expect(currencyCalls).toHaveLength(1); // no retry for non-404 failures
+  });
+});
+
+describe('NinjaPriceCache — resolved-league cache keys', () => {
+  it('shares one cache entry/HTTP call regardless of the caller-supplied league casing', async () => {
+    const ctx = makeCtx();
+    const httpGet = mockHttp(ctx, {
+      'index-state': () => INDEX_STATE,
+      'currency/overview': () => ({ lines: [] }),
+    });
+
+    const cache = new NinjaPriceCache(ctx);
+    await cache.getPriceMap('Currency', 'standard'); // lowercase
+    await cache.getPriceMap('Currency', 'Standard'); // canonical
+
+    const currencyCalls = httpGet.mock.calls.filter((c: any[]) => c[0].includes('currency/overview'));
+    expect(currencyCalls).toHaveLength(1);
+  });
+
+  it('sends the resolved displayName as the league query param even when called with a differently-cased name', async () => {
+    const ctx = makeCtx();
+    const httpGet = mockHttp(ctx, {
+      'index-state': () => INDEX_STATE,
+      'currency/overview': () => ({ lines: [] }),
+    });
+
+    const cache = new NinjaPriceCache(ctx);
+    await cache.getPriceMap('Currency', 'STANDARD');
+
+    expect(httpGet).toHaveBeenCalledWith(
+      expect.stringContaining('currency/overview'),
+      expect.objectContaining({ params: expect.objectContaining({ league: 'Standard' }) })
+    );
+  });
+});
+
+describe('NinjaPriceCache — User-Agent header', () => {
+  it('sends the poe-ai User-Agent on every economy/index-state request', async () => {
+    const ctx = makeCtx();
+    const httpGet = mockHttp(ctx, {
+      'index-state': () => INDEX_STATE,
+      'currency/overview': () => ({ lines: [] }),
+    });
+
+    const cache = new NinjaPriceCache(ctx);
+    await cache.getPriceMap('Currency', 'Standard');
+
+    for (const call of httpGet.mock.calls) {
+      expect(call[1]).toEqual(
+        expect.objectContaining({ headers: { 'User-Agent': 'poe-ai/1.0 (github.com/msciotti/poe-ai)' } })
+      );
+    }
+  });
+});

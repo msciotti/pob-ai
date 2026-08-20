@@ -33,6 +33,21 @@ const INDEX_STATE_TTL_MS = 15 * 60 * 1000;
 const BASE_URL = 'https://poe.ninja';
 const USER_AGENT = 'poe-ai/1.0 (github.com/msciotti/poe-ai)';
 
+/**
+ * poe.ninja can rotate a league's snapshot version well inside our 15-minute
+ * index-state TTL. When that happens every economy endpoint 404s against
+ * the now-stale `{version}` in the path. Detect that specific failure so we
+ * can invalidate the cached index-state and retry once with a fresh version,
+ * rather than surfacing every call as an error until the TTL naturally expires.
+ */
+function isNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const status =
+    (err as { response?: { status?: number } }).response?.status ??
+    (err as { status?: number }).status;
+  return status === 404;
+}
+
 type NinjaCategory =
   | 'Currency' | 'Fragment'
   | 'Map'
@@ -101,23 +116,59 @@ export class NinjaPriceCache {
   constructor(private ctx: PluginContext) {}
 
   async getPriceMap(category: NinjaCategory, league: string): Promise<Map<string, NinjaPriceLine>> {
-    const key = `wealth:ninja:${this.ctx.leagueState.patchVersion}:${league}:${category}`;
+    // Resolve to the canonical league displayName first so the cache key is
+    // stable regardless of how the caller spelled/cased the league name
+    // (e.g. "standard" and "Standard" now share one cache entry/HTTP call).
+    const { version, displayName } = await this.resolveLeague(league);
+
+    const key = this.priceMapCacheKey(category, displayName);
     const cached = this.ctx.cache.get<Map<string, NinjaPriceLine>>(key);
     if (cached) return cached;
 
-    const { version, displayName } = await this.resolveLeague(league);
-
-    let map: Map<string, NinjaPriceLine>;
-    if ((CURRENCY_CATS as string[]).includes(category)) {
-      map = await this.fetchCurrencyMap(version, displayName, category);
-    } else if ((EXCHANGE_ONLY_CATS as string[]).includes(category)) {
-      map = await this.fetchExchangeMap(version, displayName, category);
-    } else {
-      map = await this.fetchItemMap(version, displayName, category);
-    }
+    const map = await this.fetchPriceMapWithRetry(category, version, displayName, league);
 
     this.ctx.cache.set(key, map, TTL_MS);
     return map;
+  }
+
+  private async fetchPriceMapForVersion(
+    category: NinjaCategory,
+    version: string,
+    leagueDisplayName: string
+  ): Promise<Map<string, NinjaPriceLine>> {
+    if ((CURRENCY_CATS as string[]).includes(category)) {
+      return this.fetchCurrencyMap(version, leagueDisplayName, category);
+    }
+    if ((EXCHANGE_ONLY_CATS as string[]).includes(category)) {
+      return this.fetchExchangeMap(version, leagueDisplayName, category);
+    }
+    return this.fetchItemMap(version, leagueDisplayName, category);
+  }
+
+  /**
+   * Fetch a price map for an already-resolved version, and if that 404s
+   * (stale snapshot version — poe.ninja rotated it since we cached
+   * index-state), invalidate the cached index-state, re-resolve the league,
+   * and retry exactly once with the fresh version before giving up.
+   */
+  private async fetchPriceMapWithRetry(
+    category: NinjaCategory,
+    version: string,
+    leagueDisplayName: string,
+    league: string
+  ): Promise<Map<string, NinjaPriceLine>> {
+    try {
+      return await this.fetchPriceMapForVersion(category, version, leagueDisplayName);
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
+      this.ctx.cache.delete(this.indexStateCacheKey());
+      const fresh = await this.resolveLeague(league);
+      return this.fetchPriceMapForVersion(category, fresh.version, fresh.displayName);
+    }
+  }
+
+  private priceMapCacheKey(category: NinjaCategory, league: string): string {
+    return `wealth:ninja:${this.ctx.leagueState.patchVersion}:${league}:${category}`;
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -154,7 +205,7 @@ export class NinjaPriceCache {
   }
 
   private async fetchIndexState(): Promise<NinjaIndexState> {
-    const cacheKey = `wealth:ninja:index-state:${this.ctx.leagueState.patchVersion}`;
+    const cacheKey = this.indexStateCacheKey();
     const cached = this.ctx.cache.get<NinjaIndexState>(cacheKey);
     if (cached) return cached;
 
@@ -164,6 +215,10 @@ export class NinjaPriceCache {
     });
     this.ctx.cache.set(cacheKey, data, INDEX_STATE_TTL_MS);
     return data;
+  }
+
+  private indexStateCacheKey(): string {
+    return `wealth:ninja:index-state:${this.ctx.leagueState.patchVersion}`;
   }
 
   // ──────────────────────────────────────────────────────────────────────────

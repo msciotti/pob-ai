@@ -64,6 +64,9 @@ importers:
         specifier: '3'
         version: 3.25.76
     optionalDependencies:
+      '@poe-ai/plugin-archetypes':
+        specifier: workspace:*
+        version: link:../plugin-archetypes
       '@poe-ai/plugin-ninja':
         specifier: workspace:*
         version: link:../plugin-ninja
@@ -126,6 +129,34 @@ importers:
       ajv:
         specifier: ^8.17.1
         version: 8.17.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.13
+        version: 4.0.13(@types/node@24.10.1)
+
+  packages/plugin-archetypes:
+    dependencies:
+      zod:
+        specifier: '3'
+        version: 3.25.76
+    devDependencies:
+      '@poe-ai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@poe-ai/plugin-pob':
+        specifier: workspace:*
+        version: link:../plugin-pob
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.10.1
+      '@types/semver':
+        specifier: ^7.5.8
+        version: 7.8.0
+      semver:
+        specifier: ^7.7.1
+        version: 7.7.3
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -638,6 +669,9 @@ packages:
 
   '@types/range-parser@1.2.7':
     resolution: {integrity: sha512-hKormJbkJqzQGhziax5PItDUTMAM9uE2XXQmM37dyd4hVM+5aVl7oVxMVUiVQn2oCQFN/LKCZdvSM0pFRqbSmQ==}
+
+  '@types/semver@7.8.0':
+    resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
 
   '@types/send@0.17.6':
     resolution: {integrity: sha512-Uqt8rPBE8SY0RK8JB1EzVOIZ32uqy8HwdxCnoCOsYrvnswqmFZ/k+9Ikidlk/ImhsdvBsloHbAlewb2IEBV/Og==}
@@ -1869,6 +1903,8 @@ snapshots:
   '@types/qs@6.14.0': {}
 
   '@types/range-parser@1.2.7': {}
+
+  '@types/semver@7.8.0': {}
 
   '@types/send@0.17.6':
     dependencies:

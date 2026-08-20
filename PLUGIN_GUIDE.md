@@ -276,12 +276,13 @@ After publishing (or during local development with `npm link`), add the package 
   "plugins": [
     "@poe-ai/plugin-pob",
     "@poe-ai/plugin-wiki",
+    "@poe-ai/plugin-archetypes",
     "poe-ai-plugin-ninja"
   ]
 }
 ```
 
-Plugins are initialized in the order listed. If your plugin depends on `ctx.pobRuntime`, list `@poe-ai/plugin-pob` before it.
+Plugins are initialized in the order listed. If your plugin depends on `ctx.pobRuntime`, list `@poe-ai/plugin-pob` before it — `@poe-ai/plugin-archetypes`'s `identify_archetype` tool is an example: it degrades to a clear non-error message instead of throwing if `@poe-ai/plugin-pob` isn't loaded (or no build has been loaded yet), rather than assuming `ctx.pobRuntime` is present.
 
 ## Handling Errors
 

@@ -1,0 +1,97 @@
+{
+  "slug": "aura-stacker",
+  "name": "Aura Stacker",
+  "summary": "A reservation-focused shell that pushes 'reduced mana reserved' and reservation efficiency as far as possible to run a large number of simultaneous reservation auras, then relies on 'increased Effect of Auras' to make every one of them count. Identity is defined by aura count and aura-effect investment rather than by any specific main skill — the nominal main skill is frequently incidental, sometimes just another aura.",
+  "identitySignature": {
+    "signals": [
+      {
+        "kind": "auraCount",
+        "required": true,
+        "weight": 0.55,
+        "minCount": 5,
+        "description": "Running 5+ simultaneous reservation auras is the archetype's core mechanical signature — this many auras isn't reachable without deliberate reservation-efficiency and 'reduced mana reserved' investment."
+      },
+      {
+        "kind": "auraCount",
+        "required": false,
+        "weight": 0.2,
+        "minCount": 8,
+        "description": "8+ auras marks the dedicated/extreme end of the archetype rather than a build that simply picked up a couple of extra auras."
+      },
+      {
+        "kind": "mainSkill",
+        "required": false,
+        "weight": 0.15,
+        "gemTags": ["aura"],
+        "description": "Even the nominal 'main skill' is frequently just another aura (e.g. Zealotry or Discipline) rather than a dedicated damage skill — itself a marker of the archetype."
+      },
+      {
+        "kind": "uniqueItem",
+        "required": false,
+        "weight": 0.1,
+        "itemNames": ["Ashes of the Stars"],
+        "description": "Ashes of the Stars (amulet) is a build-defining item for scaling aura effect on Grace, Determination, Discipline, and Wrath, and is disproportionately common in dedicated aura stacker builds."
+      }
+    ]
+  },
+  "scalingVectors": [
+    {
+      "mechanic": "Reduced Mana Reserved / Reservation Efficiency",
+      "explanation": "Every percentage point of reduced mana reservation (tree notables, reservation efficiency jewels/clusters) is what makes fitting 5+ auras into one mana pool possible at all — this is the enabling stat, not a damage stat by itself."
+    },
+    {
+      "mechanic": "Increased Effect of (non-Curse) Auras",
+      "explanation": "This scales every stat granted by every aura you run simultaneously — the more auras you stack, the more a single point of 'aura effect' is worth, which is why aura-count stacking and aura-effect stacking compound each other rather than being independent levers."
+    },
+    {
+      "mechanic": "Flat damage/defense granted by the specific auras run",
+      "explanation": "The actual output (flat elemental damage from Wrath/Anger/Hatred, armour from Determination, evasion from Grace, etc.) comes from which auras are run and how much 'more' multiplier sits on the delivery skill — aura stacking is a force multiplier on whatever conversion/delivery setup receives it, not a damage source on its own."
+    }
+  ],
+  "deadStats": [
+    {
+      "stat": "Attack Speed / Cast Speed",
+      "reason": "For the aura-stacking investment itself (reservation efficiency, aura effect, mana reservation) neither matters — they only matter for whatever delivery skill benefits from the stacked auras, and only if that skill is speed-scaling."
+    },
+    {
+      "stat": "A second copy of an already-running aura",
+      "reason": "Identical auras from multiple sources do not stack in Path of Exile — only the strongest instance applies, so a redundant copy of Determination/Grace/etc. adds nothing beyond acting as a backup if one source is unreserved."
+    },
+    {
+      "stat": "Skill/Buff Duration",
+      "reason": "Reservation auras (unlike Vaal/temporary auras) are permanent while active — increased or reduced duration does nothing for the always-on version."
+    }
+  ],
+  "defensiveProfile": {
+    "layers": [
+      "Whatever the stacked auras happen to grant (commonly Determination→armour, Grace→evasion, Discipline→ES) rather than one dedicated defense layer",
+      "Purity auras providing elemental resistance overcap",
+      "Often thinner Life/ES in absolute terms, since gear budget goes to reservation/aura-effect rolls instead of health pool"
+    ],
+    "characteristicWeaknesses": [
+      "A single unreserved 'emergency' skill slot competes with every other aura for a shrinking mana pool, so options like Vaal skills are often the first thing cut.",
+      "Because defense is a byproduct of whichever auras are run rather than a deliberate layer, gaps are easy to miss — e.g. no explicit physical mitigation if Determination is skipped in favor of damage auras.",
+      "Auras interrupted by mana problems (from adding one more aura, or being silenced/hindered) drop the entire defensive stack at once, not gradually."
+    ]
+  },
+  "failureModes": [
+    {
+      "symptom": "Character can't fit the next aura despite having spare mana on paper",
+      "diagnosis": "Reservation is calculated per-aura as a percentage of max mana — mana left over that's less than one more aura's reservation cost is still a hard block, not a partial fit.",
+      "fix": "Add more 'reduced mana reserved' (tree notables, reservation efficiency) rather than raw increased maximum mana, which doesn't reduce what each aura costs to reserve."
+    },
+    {
+      "symptom": "Auras are confirmed active but stats barely change when aura-effect nodes are theoretically removed",
+      "diagnosis": "Not enough 'increased Effect of Auras' invested for the aura count to matter — the count is high but each aura is contributing near its base magnitude.",
+      "fix": "Reallocate some 'more auras' investment into 'increased Aura Effect' once past the point of diminishing returns on count alone."
+    },
+    {
+      "symptom": "Low Life/ES relative to character level with no clear defensive layer in key stats",
+      "diagnosis": "Aura-effect and reservation-efficiency gear rolls likely crowded out Life/ES rolls on the same items.",
+      "fix": "Audit gear for slots that can carry both an aura-relevant roll and a Life/ES roll (e.g. a hybrid life roll on an aura-effect rare) instead of treating them as mutually exclusive."
+    }
+  ],
+  "provenance": "hand-curated",
+  "patchValidity": "3.29.x",
+  "lastReviewedPatch": "3.29"
+}

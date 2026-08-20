@@ -1,0 +1,35 @@
+{
+  "name": "@poe-ai/plugin-archetypes",
+  "version": "0.1.0",
+  "description": "Patch-versioned build archetype knowledge base + deterministic classifier for poe-ai",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "@poe-ai/core": "workspace:*",
+    "zod": "3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13",
+    "@types/node": "^24.10.1",
+    "@poe-ai/core": "workspace:*",
+    "@poe-ai/plugin-pob": "workspace:*",
+    "semver": "^7.7.1",
+    "@types/semver": "^7.5.8"
+  }
+}

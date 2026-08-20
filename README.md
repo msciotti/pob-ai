@@ -60,6 +60,7 @@ Add to your Claude Desktop MCP config:
 |--------|-------|-------------|
 | `@poe-ai/plugin-pob` | `load_build`, `get_build_stats`, `allocate_passive` | Path of Building integration via LuaJIT subprocess. Requires LuaJIT. |
 | `@poe-ai/plugin-wiki` | `wiki_lookup`, `get_passive_info`, `get_item_info`, `get_skill_info` | Official PoE wiki via MediaWiki API. No external runtime required. |
+| `@poe-ai/plugin-archetypes` | `list_archetypes`, `archetype_info`, `identify_archetype` | Patch-versioned build archetype knowledge base + deterministic classifier. `identify_archetype` uses `@poe-ai/plugin-pob` if loaded; degrades gracefully otherwise. |
 
 ## Config Reference
 
@@ -114,8 +115,9 @@ pnpm --filter @poe-ai/plugin-pob test
 ```
 packages/
   core/          @poe-ai/core        — MCP server + shared plugin infrastructure
-  plugin-pob/    @poe-ai/plugin-pob  — Path of Building integration (LuaJIT subprocess)
-  plugin-wiki/   @poe-ai/plugin-wiki — Official PoE wiki via MediaWiki API
+  plugin-pob/    @poe-ai/plugin-pob        — Path of Building integration (LuaJIT subprocess)
+  plugin-wiki/   @poe-ai/plugin-wiki       — Official PoE wiki via MediaWiki API
+  plugin-archetypes/ @poe-ai/plugin-archetypes — Build archetype knowledge base + classifier
 ```
 
 ## License

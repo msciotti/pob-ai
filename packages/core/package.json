@@ -34,7 +34,8 @@
     "@poe-ai/plugin-pob": "workspace:*",
     "@poe-ai/plugin-wiki": "workspace:*",
     "@poe-ai/plugin-ninja": "workspace:*",
-    "@poe-ai/plugin-wealth": "workspace:*"
+    "@poe-ai/plugin-wealth": "workspace:*",
+    "@poe-ai/plugin-archetypes": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

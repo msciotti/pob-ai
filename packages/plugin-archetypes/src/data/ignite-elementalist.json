@@ -1,0 +1,103 @@
+{
+  "slug": "ignite-elementalist",
+  "name": "Ignite Elementalist",
+  "summary": "A fire caster shell built around the Elementalist ascendancy, which is the only class with dedicated support for making Ignite (rather than the hit) the primary damage source — notably a notable that makes all damage capable of igniting and converts enemies' physical damage dealt to fire while ignited. Damage comes from the ignite DoT scaling off the hit's fire damage, not from the hit itself, so — like phys DoT bleed — several hit-scaling stats are secondary rather than primary levers.",
+  "identitySignature": {
+    "signals": [
+      {
+        "kind": "ascendancy",
+        "required": true,
+        "weight": 0.4,
+        "ascendancyNames": ["Elementalist"],
+        "description": "Elementalist has the notable 'Shaper of Flames' ('Hits always Ignite', 'All Damage can Ignite', enemies ignited by you convert 40% of their physical damage dealt to fire) — this is the archetype's structural home; no other ascendancy guarantees ignite this directly."
+      },
+      {
+        "kind": "mainSkill",
+        "required": true,
+        "weight": 0.3,
+        "gemTags": ["fire"],
+        "description": "Main skill deals Fire damage — a prerequisite for Ignite at all, since only Fire damage from a Hit can cause Ignite."
+      },
+      {
+        "kind": "statShape",
+        "required": false,
+        "weight": 0.2,
+        "stat": "IgniteDPS",
+        "op": "gte",
+        "threshold": 50,
+        "description": "Nonzero, meaningful Ignite DPS in PoB's calc output confirms the build is actually generating ignite damage, not just using a fire skill without ignite-focused support/tree investment."
+      },
+      {
+        "kind": "uniqueItem",
+        "required": false,
+        "weight": 0.1,
+        "itemNames": ["Pyre"],
+        "description": "Pyre (ring) converts all cold damage dealt to fire damage — a common tool for repurposing cold-scaling skills or gear into an ignite-focused build."
+      }
+    ]
+  },
+  "scalingVectors": [
+    {
+      "mechanic": "Base Fire hit damage",
+      "explanation": "Ignite magnitude derives from the fire damage of the hit that caused it (90% of that hit's fire damage per second by default, over a 4 second base duration — PoB's IgnitePercentBase/IgniteDurationBase), so hit-scaling fire damage still matters — as the base the ignite reads from, the same way physical hit damage feeds a bleed tick."
+    },
+    {
+      "mechanic": "Increased Burning Damage / Damage over Time multiplier",
+      "explanation": "This is the direct multiplier on the ongoing ignite tick and, once guaranteed-ignite is in place, the main scaling lever — distinct from generic 'increased Fire Damage', which affects the hit but not the already-applied DoT."
+    },
+    {
+      "mechanic": "Chance to Ignite (or guaranteed via Shaper of Flames / crits)",
+      "explanation": "Critical strikes always ignite by default; Elementalist's Shaper of Flames notable makes ALL damage capable of igniting regardless of crit — this turns ignite from an occasional crit bonus into the primary, reliable damage source."
+    },
+    {
+      "mechanic": "Exposure / resistance reduction (Elemental Equilibrium, Mastermind of Discord)",
+      "explanation": "Lowering the target's fire resistance increases both the hit and the resulting ignite proportionally — exposure effects are a real damage lever here, not just a defensive-adjacent tree pick."
+    }
+  ],
+  "deadStats": [
+    {
+      "stat": "Attack/Cast Speed (beyond upkeep needs)",
+      "reason": "Once an enemy is reliably ignited, the ongoing tick doesn't scale with how fast you're attacking or casting — speed matters for re-applying ignite and clearing packs, not for a single ignite's magnitude."
+    },
+    {
+      "stat": "Critical Strike Multiplier",
+      "reason": "Critical Strike Multiplier scales the Hit, not the Ignite it causes — once Shaper of Flames-style guaranteed ignition is in place, crit multiplier stops being the primary damage lever it would be on a pure-hit build."
+    },
+    {
+      "stat": "Elemental Damage of non-Fire types (unless converted)",
+      "reason": "Only Fire damage from a Hit can cause Ignite — Cold/Lightning damage on the same hit contributes to the hit's own damage but not to ignite magnitude, unless converted to Fire (e.g. via Pyre)."
+    }
+  ],
+  "defensiveProfile": {
+    "layers": [
+      "Elemental resistances (own) — Elementalist's kit leans into elemental interactions and golems rather than a single dedicated mitigation layer",
+      "Golem-based utility/defense (Elementalist has strong innate golem support: extra golems, shared golem buffs)",
+      "Standard caster defenses (Energy Shield or Life plus evasion/spell suppression) — not archetype-specific"
+    ],
+    "characteristicWeaknesses": [
+      "Ignite, like Righteous Fire and bleed, deals damage over time — chaos damage, physical hits, and non-fire ailments aren't covered by any fire-specific mitigation the build stacks.",
+      "A build tuned entirely around guaranteed-ignite can under-invest in raw hit damage, since the ignite tick is 'automatic' — this can leave burst phases (where sustained ignite hasn't had time to matter yet) weak.",
+      "Golem-reliant defensive/offensive value is lost entirely if golems die or aren't resummoned, which is easy to overlook mid-fight."
+    ]
+  },
+  "failureModes": [
+    {
+      "symptom": "Enemies aren't igniting reliably despite Fire damage skills",
+      "diagnosis": "Missing guaranteed-ignite investment (Shaper of Flames) or low crit chance — without either, ignite only happens on the subset of hits that crit.",
+      "fix": "Take Shaper of Flames (Elementalist) or invest explicitly in crit chance/multiplier if staying crit-based; don't assume 'chance to ignite' is covered when relying on crits alone."
+    },
+    {
+      "symptom": "IgniteDPS is a small fraction of TotalDPS",
+      "diagnosis": "The build is dealing fire damage but not scaling the ignite tick itself — Burning Damage / Damage over Time multiplier investment is missing even though the hit is fine.",
+      "fix": "Redirect some 'increased Fire Damage' investment (which only affects the hit) into 'increased Burning Damage' / Damage over Time multiplier, which affects the ignite specifically."
+    },
+    {
+      "symptom": "Damage is fine on single targets but the character is fragile to elemental/physical bosses",
+      "diagnosis": "Investment went entirely into fire-offense levers (ignite, burning damage, exposure) with no corresponding defensive layer — Elementalist's kit doesn't provide one for free.",
+      "fix": "Check elemental resistance overcap and a real Life/ES pool independently — don't assume ignite-focused offense investment is doing any defensive work."
+    }
+  ],
+  "provenance": "hand-curated",
+  "patchValidity": "3.29.x",
+  "lastReviewedPatch": "3.29"
+}

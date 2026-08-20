@@ -127,6 +127,34 @@ describe('Skill Gems', () => {
     );
   });
 
+  it('getSocketGroups reports gem tags and support flag correctly', async () => {
+    await loadTestBuild(runtime);
+
+    await runtime.addSocketGroup('Tagged Test', [
+      { name: 'Fireball', level: 20, quality: 0 },
+      { name: 'Elemental Focus', level: 20, quality: 0 },
+    ]);
+
+    const groups = await runtime.getSocketGroups();
+    const [activeGem, supportGem] = groups[0].gems;
+
+    // Active skill: not a support, tagged fire/spell (Gems.lua's tags table for Fireball).
+    expect(activeGem.name).toBe('Fireball');
+    expect(activeGem.support).toBe(false);
+    expect(activeGem.tags?.fire).toBe(true);
+    expect(activeGem.tags?.spell).toBe(true);
+
+    // Support gem: flagged as a support, tagged accordingly — not an active/damage skill.
+    expect(supportGem.name).toBe('Elemental Focus');
+    expect(supportGem.support).toBe(true);
+    expect(supportGem.tags?.support).toBe(true);
+
+    console.log(
+      `   Fireball: support=${activeGem.support}, tags=${JSON.stringify(activeGem.tags)}; ` +
+        `Elemental Focus: support=${supportGem.support}, tags=${JSON.stringify(supportGem.tags)}`
+    );
+  });
+
   it('Clearing socket groups should reset DPS', async () => {
     await loadTestBuild(runtime);
 

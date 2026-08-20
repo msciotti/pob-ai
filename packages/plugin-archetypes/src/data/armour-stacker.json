@@ -1,0 +1,100 @@
+{
+  "slug": "armour-stacker",
+  "name": "Armour Stacker",
+  "summary": "A hit-mitigation shell built around converting all Evasion Rating to Armour via the Iron Reflexes keystone, then stacking as much flat and % increased Armour as possible (Determination, Basalt Flask, tree/jewel armour nodes) to push the Armour/(Armour + 10×Damage) mitigation formula toward its cap against physical hits. A common modern variant converts the stacked Armour into elemental damage via unique interactions (e.g. Doryani's Prototype) so the same stat pays for both defense and offense.",
+  "identitySignature": {
+    "signals": [
+      {
+        "kind": "keystone",
+        "required": true,
+        "weight": 0.55,
+        "keystoneNames": ["Iron Reflexes"],
+        "description": "Iron Reflexes converting all Evasion Rating to Armour is the mechanical foundation this archetype is built around — without it, stacked Armour and Evasion rolls just fight each other for gear budget instead of compounding."
+      },
+      {
+        "kind": "statShape",
+        "required": false,
+        "weight": 0.25,
+        "stat": "Armour",
+        "op": "gte",
+        "threshold": 30000,
+        "description": "Dedicated armour stackers push Armour well past what a normal heavy-armour build ever reaches; a five-figure-plus Armour stat is a strong tell (values well into six figures are common at the top end)."
+      },
+      {
+        "kind": "mainSkill",
+        "required": false,
+        "weight": 0.1,
+        "namePatterns": ["Smite"],
+        "description": "Smite is the most common delivery skill for the modern armour-stacker-to-lightning-damage conversion variant, though the archetype itself isn't tied to any one skill."
+      },
+      {
+        "kind": "uniqueItem",
+        "required": false,
+        "weight": 0.15,
+        "itemNames": ["Doryani's Prototype"],
+        "description": "Doryani's Prototype (gloves) is a build-defining item for the current armour-stacking-to-lightning-damage variant, reading the same Armour/Energy Shield stat a second time to produce damage."
+      }
+    ]
+  },
+  "scalingVectors": [
+    {
+      "mechanic": "Iron Reflexes (Evasion→Armour conversion)",
+      "explanation": "This is what makes stacking both Evasion and Armour rolls on the same gear additive instead of wasteful — every point of Evasion becomes Armour, so Evasion-inherent item bases (boots, gloves) become armour-stacking pieces too."
+    },
+    {
+      "mechanic": "% increased / more Armour (Determination, Basalt Flask, tree, unique 'more' multipliers)",
+      "explanation": "Because mitigation follows Armour/(Armour + 10×Damage), Armour needs to be very large before returns taper — % increased/more Armour multipliers are what actually push a stacker past the point where a normal build's Armour investment plateaus."
+    },
+    {
+      "mechanic": "Doryani's Prototype-style Armour-to-damage conversion",
+      "explanation": "In the offense-focused variant, the same Armour stat is read a second time by a specific unique-item conversion to produce flat lightning damage, so Armour stops being a pure defense stat and becomes the build's primary damage scaling too."
+    }
+  ],
+  "deadStats": [
+    {
+      "stat": "Evasion Rating (as a distinct stat)",
+      "reason": "Under Iron Reflexes, Evasion Rating provides zero chance to evade attacks — it is converted entirely to Armour, so anything scaling 'evasion' specifically isn't adding a separate defensive layer beyond the Armour it becomes."
+    },
+    {
+      "stat": "Dexterity (for evasion)",
+      "reason": "Iron Reflexes explicitly removes Dexterity's bonus to Evasion Rating, so Dex investment taken specifically for evasion purposes does nothing once the keystone is allocated."
+    },
+    {
+      "stat": "Block Chance investment beyond a free baseline",
+      "reason": "Armour and block both mitigate hits, but dedicating gear/tree budget to both at once is usually inefficient for a build whose entire identity is pushing one stat to its cap — most armour stackers take whatever block is free (shield, Glancing Blows) rather than dedicating slots to it."
+    }
+  ],
+  "defensiveProfile": {
+    "layers": [
+      "Very high Armour reducing physical hit damage toward the formula's cap",
+      "Fortify and endurance charges stacking additively on top of the Armour formula's output",
+      "Elemental resistances/overcap for the hit types Armour doesn't touch"
+    ],
+    "characteristicWeaknesses": [
+      "Armour only mitigates hit damage — it does nothing against damage over time, chaos damage, or degens, which can bypass the build's entire defensive identity.",
+      "The Armour formula is damage-dependent (Armour/(Armour + 10×Damage)) — a single very large hit (a boss slam) is mitigated a smaller percentage than a stream of small hits, so a huge Armour number can still misrepresent boss-killer safety.",
+      "Investment is heavily concentrated in one stat; resistance overcap or flat Life can be neglected since gear/tree budget is dominated by Armour and its multipliers."
+    ]
+  },
+  "failureModes": [
+    {
+      "symptom": "Armour stat is very high but the character still takes big chunks of damage from specific boss slams",
+      "diagnosis": "The Armour/(Armour + 10×Damage) formula mitigates a smaller percentage of very large single hits than of frequent small hits — a huge Armour number reads as 'safe' but boss one-shots scale with raw hit size, not average incoming DPS.",
+      "fix": "Check Physical Damage Reduction against the specific boss's known hit size (not just the flat Armour number), and layer in flat mitigation (Fortify, endurance charges, Basalt Flask) that doesn't degrade against big hits the way the Armour formula does."
+    },
+    {
+      "symptom": "Character dies to degens/DoTs/chaos damage despite a huge Armour stat",
+      "diagnosis": "Armour has zero effect on damage over time or chaos damage — the stacked Armour investment provides no protection here at all.",
+      "fix": "Address DoT/chaos survivability independently (chaos resistance, ailment avoidance) rather than assuming the Armour stack covers it."
+    },
+    {
+      "symptom": "Armour is high but PhysicalTakenHitMult still looks weak/unimproved",
+      "diagnosis": "Iron Reflexes may be missing (Evasion Rating not converting to Armour), or gear rolled Evasion instead of Armour/hybrid without the keystone to make it count.",
+      "fix": "Confirm Iron Reflexes is allocated before buying/crafting more Evasion-base gear — without it, Evasion rolls are contributing to a mechanic (dodge-via-evasion) this archetype isn't using.",
+      "statCheck": { "stat": "PhysicalTakenHitMult", "op": "gt", "threshold": 0.5 }
+    }
+  ],
+  "provenance": "hand-curated",
+  "patchValidity": "3.29.x",
+  "lastReviewedPatch": "3.29"
+}

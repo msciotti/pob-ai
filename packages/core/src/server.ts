@@ -14,21 +14,22 @@ import { ConsoleLogger } from './logger.js';
 import { loadConfig } from './config/index.js';
 
 export class PoeAiMcpServer {
-  private mcpServer: McpServer;
   private ctx: PluginContext | null = null;
+  private plugins: PoEPlugin[] = [];
   private initPromise: Promise<void> | null = null;
   private logger = new ConsoleLogger('[poe-ai:core]');
 
-  constructor() {
-    this.mcpServer = new McpServer({
-      name: 'poe-ai',
-      version: '0.1.0',
-    });
-  }
+  // Every connect() creates its own McpServer (see connect() for why); tracked here
+  // so close() can tear all of them down. Entries remove themselves once their
+  // transport closes, so this doesn't grow unbounded over a long-lived HTTP server's
+  // lifetime.
+  private connectedServers = new Set<McpServer>();
 
   /**
    * Lazy initialization — called once on first connect().
-   * Idempotent: subsequent calls return the same promise.
+   * Idempotent: subsequent calls return the same promise. The check-then-assign
+   * below is race-safe because JS is single-threaded and nothing awaits between
+   * them, so concurrent callers all observe the same in-flight promise.
    */
   private async initialize(): Promise<void> {
     if (this.initPromise) return this.initPromise;
@@ -52,28 +53,27 @@ export class PoeAiMcpServer {
       loggerName: 'core',
     });
 
-    const plugins = await loadPlugins(config.plugins, this.ctx, this.logger);
-    this._registerPluginTools(plugins, this.ctx);
+    this.plugins = await loadPlugins(config.plugins, this.ctx, this.logger);
 
-    this.logger.info(`Server initialized with ${plugins.length} plugins`);
+    this.logger.info(`Server initialized with ${this.plugins.length} plugins`);
   }
 
   /**
-   * Register all tools contributed by the loaded plugins.
+   * Register all tools contributed by the loaded plugins onto the given McpServer.
    *
    * Each tool's inputSchema is explicitly parsed via Zod before dispatching to
    * the handler, honoring the PluginTool contract defined in types.ts.
    */
-  private _registerPluginTools(plugins: PoEPlugin[], ctx: PluginContext): void {
+  private _registerPluginTools(mcpServer: McpServer, plugins: PoEPlugin[], ctx: PluginContext): void {
     for (const plugin of plugins) {
       for (const tool of plugin.tools) {
-        this._registerOneTool(tool, ctx);
+        this._registerOneTool(mcpServer, tool, ctx);
       }
     }
   }
 
-  private _registerOneTool<TInput>(tool: PluginTool<TInput>, ctx: PluginContext): void {
-    this.mcpServer.registerTool(
+  private _registerOneTool<TInput>(mcpServer: McpServer, tool: PluginTool<TInput>, ctx: PluginContext): void {
+    mcpServer.registerTool(
       tool.name,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       { description: tool.description, inputSchema: (tool.inputSchema as any).shape ?? tool.inputSchema },
@@ -90,24 +90,64 @@ export class PoeAiMcpServer {
 
   /**
    * Connect the MCP server to a transport.
-   * Can be called multiple times for different transports (stateless HTTP mode).
+   *
+   * A brand-new McpServer (and its underlying SDK Server/Protocol instance) is
+   * created on every call, wired to the shared, already-initialized plugin state
+   * (ctx + plugins) — plugin loading itself only ever happens once, via the
+   * memoized initialize() above.
+   *
+   * This matters under concurrency: the SDK's Protocol class stores its active
+   * transport as an instance field (`this._transport`), set by connect() and read
+   * whenever a response needs to be sent back. Reusing a single McpServer across
+   * multiple connect() calls — as stateless HTTP mode does, one call per request —
+   * would have each new request's connect() overwrite that field, so an in-flight
+   * request could have its response routed to a *different* request's transport.
+   * Giving every connection its own McpServer instance keeps each one's transport
+   * reference independent, which is the SDK-recommended pattern for stateless
+   * request/response transports (HTTP) as well as the natural shape for long-lived
+   * single-connection transports (stdio) — connect() is just called once there.
    */
   async connect(transport: Transport): Promise<void> {
     await this.initialize();
-    await this.mcpServer.connect(transport);
+
+    const mcpServer = new McpServer({
+      name: 'poe-ai',
+      version: '0.1.0',
+    });
+    this._registerPluginTools(mcpServer, this.plugins, this.ctx!);
+
+    // Only track (and wire cleanup for) a server once it's actually connected — if
+    // connect() throws, there's nothing to close and nothing that will ever fire
+    // onclose, so adding it beforehand would leak the entry in connectedServers
+    // forever.
+    await mcpServer.connect(transport);
+
+    this.connectedServers.add(mcpServer);
+    mcpServer.server.onclose = () => {
+      this.connectedServers.delete(mcpServer);
+    };
   }
 
   /**
-   * Gracefully close the server and dispose of plugins that support it.
+   * Gracefully close the server: tears down every still-connected McpServer
+   * (closing their transports) and disposes plugins that support it.
    */
   async close(): Promise<void> {
-    await this.mcpServer.close();
-  }
+    const servers = [...this.connectedServers];
+    this.connectedServers.clear();
+    await Promise.all(servers.map((s) => s.close()));
 
-  /**
-   * Expose the underlying McpServer for advanced use cases.
-   */
-  getServer(): McpServer {
-    return this.mcpServer;
+    if (this.ctx) {
+      const ctx = this.ctx;
+      await Promise.all(
+        this.plugins.map(async (plugin) => {
+          try {
+            await plugin.dispose?.(ctx);
+          } catch (err) {
+            this.logger.warn(`Error disposing plugin "${plugin.name}": ${(err as Error).message}`);
+          }
+        }),
+      );
+    }
   }
 }

@@ -1,0 +1,31 @@
+{
+  "name": "@poe-ai/integration-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end tests that drive the BUILT poe-ai MCP server over real stdio/HTTP transports using the official MCP SDK client — the layer that catches transport/wiring bugs package-level unit tests can't see.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "zod": "3"
+  },
+  "peerDependencies": {
+    "@poe-ai/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@poe-ai/core": "workspace:*",
+    "@poe-ai/plugin-pob": "workspace:*",
+    "@poe-ai/plugin-wiki": "workspace:*",
+    "@types/node": "^24.10.1",
+    "ajv": "^8.17.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.13"
+  }
+}

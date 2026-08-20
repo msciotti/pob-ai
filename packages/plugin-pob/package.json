@@ -34,7 +34,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "zod": "3"
+    "zod": "3",
+    "tar": "^7.5.2"
   },
   "peerDependencies": {
     "@poe-ai/core": "workspace:*"

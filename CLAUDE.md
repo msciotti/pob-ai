@@ -71,6 +71,7 @@ The PoB integration runs Path of Building's actual Lua code via a LuaJIT subproc
 
 ```bash
 # From repo root
+pnpm --filter @poe-ai/plugin-pob run setup  # pob-data + LuaJIT — no longer fetched by install
 pnpm -r test           # all packages
 pnpm --filter @poe-ai/plugin-pob test   # pob integration tests (requires LuaJIT)
 pnpm --filter @poe-ai/core test:mcp     # core unit tests (no external deps)

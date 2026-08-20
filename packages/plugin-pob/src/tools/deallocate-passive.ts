@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PluginTool, PluginContext } from '@poe-ai/core';
-import { KEY_BUILD_STATS } from './constants.js';
+import { computeStatChanges } from './stat-diff.js';
 
 const inputSchema = z.object({
   nodeName: z.string().min(1, 'Node name must not be empty'),
@@ -28,8 +28,7 @@ export const deallocatePassiveTool: PluginTool<Input> = {
     const runtime = ctx.pobRuntime as any;
 
     try {
-      // Capture stats before deallocation for the diff. Kept self-contained (not shared
-      // with allocate_passive.ts) since that tool's diff logic is under separate active work.
+      // Capture stats before deallocation for the diff.
       ctx.logger.info('[deallocate_passive] Getting stats before deallocation...');
       let statsBefore: Record<string, number> = {};
 
@@ -53,14 +52,11 @@ export const deallocatePassiveTool: PluginTool<Input> = {
         ctx.logger.warn('[deallocate_passive] Warning: Could not get stats after deallocation');
       }
 
-      const statChanges: Record<string, { before: number; after: number; delta: number }> = {};
-      for (const key of KEY_BUILD_STATS) {
-        const before = statsBefore[key];
-        const after = statsAfter[key];
-        if (typeof before === 'number' && typeof after === 'number') {
-          statChanges[key] = { before, after, delta: after - before };
-        }
-      }
+      // Every stat that actually changed, not a fixed subset -- same
+      // rationale as allocate_passive.ts (issue #64): e.g. CritChance
+      // recovering when Resolute Technique is deallocated needs to show up
+      // even though CritChance isn't in any curated "key stats" list.
+      const statChanges = computeStatChanges(statsBefore, statsAfter);
 
       const output = {
         success: true,

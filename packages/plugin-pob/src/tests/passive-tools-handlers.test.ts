@@ -27,7 +27,7 @@ describe('deallocate_passive (mocked ctx)', () => {
     expect(result.content[0].text).toContain('PoB plugin not loaded');
   });
 
-  it('deallocates and returns a before/after stat diff for known key stats', async () => {
+  it('deallocates and returns a before/after diff of every stat that actually changed', async () => {
     const runtime = {
       getBuildStats: vi
         .fn()
@@ -43,7 +43,10 @@ describe('deallocate_passive (mocked ctx)', () => {
     expect(output.success).toBe(true);
     expect(output.nodeName).toBe('Constitution');
     expect(output.statChanges.Life).toEqual({ before: 1000, after: 900, delta: -100 });
-    expect(output.statChanges.TotalDPS).toEqual({ before: 500, after: 500, delta: 0 });
+    // TotalDPS didn't change -- computeStatChanges() (shared with allocate_passive,
+    // see #66) filters unchanged stats out entirely rather than listing every
+    // stat that happens to exist on both sides.
+    expect(output.statChanges.TotalDPS).toBeUndefined();
     expect(runtime.deallocatePassive).toHaveBeenCalledWith('Constitution');
   });
 

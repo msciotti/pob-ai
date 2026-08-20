@@ -5,7 +5,7 @@
  * Runs during npm/pnpm install (postinstall hook)
  */
 
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { mkdir, readdir, rm, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
@@ -84,6 +84,21 @@ export function downloadCompleteMarkerPath(dataDir = POB_DATA_DIR) {
 }
 
 /**
+ * Whether the marker at `markerPath` recorded a download that kept every
+ * historical tree version. Markers written before this field existed (plain
+ * timestamp text, or any other unparseable content) default to `false` --
+ * every download before this field existed pruned TreeData, so that's the
+ * correct historical default, not a guess.
+ */
+function readMarkerAllTrees(markerPath) {
+  try {
+    return JSON.parse(readFileSync(markerPath, 'utf8'))?.allTrees === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Download file from URL
  */
 export function download(url) {
@@ -114,6 +129,7 @@ export function download(url) {
  */
 export async function downloadPob({
   dataDir = POB_DATA_DIR,
+  allTrees,
   fetchTarball = () => download(`https://github.com/${POB_REPO}/archive/refs/heads/${POB_BRANCH}.tar.gz`),
   extractTarball = (response, cwd) =>
     pipeline(
@@ -128,15 +144,46 @@ export async function downloadPob({
   console.log('📦 Downloading Path of Building source...');
 
   const marker = downloadCompleteMarkerPath(dataDir);
+  const requestedAllTrees = allTrees ?? process.env.POE_AI_ALL_TREES === '1';
 
   // Already downloaded (e.g. restored from actions/cache, or a prior local install)
-  // — skip re-fetching entirely. Without this check, every `pnpm install` wiped and
-  // re-downloaded PoB from scratch (and, since that wipe also removed the sibling
-  // luajit/ directory this script's sibling script builds into, forced a full
-  // LuaJIT rebuild too), making any pob-data cache a no-op.
+  // — skip re-fetching entirely, UNLESS what's on disk doesn't match what's being
+  // asked for now (pruned vs. every tree). Without the "skip if present" half,
+  // every `pnpm install` wiped and re-downloaded PoB from scratch (and, since that
+  // wipe also removed the sibling luajit/ directory this script's sibling script
+  // builds into, forced a full LuaJIT rebuild too), making any pob-data cache a
+  // no-op. Without the "mismatch" half, POE_AI_ALL_TREES=1 against an
+  // already-pruned install would print "already present" and do nothing --
+  // pruning deletes directories, so there's nothing left on disk to un-prune;
+  // recovering the historical trees requires an actual fresh download.
   if (existsSync(marker)) {
-    console.log(`✅ Path of Building source already present at ${dataDir} — skipping download`);
-    return { skipped: true };
+    const existingAllTrees = readMarkerAllTrees(marker);
+
+    if (requestedAllTrees === existingAllTrees) {
+      console.log(`✅ Path of Building source already present at ${dataDir} — skipping download`);
+      return { skipped: true };
+    }
+
+    if (!requestedAllTrees && existingAllTrees) {
+      // Downgrading from "every tree" to "current patch only" never needs the
+      // network -- everything the pruned set needs is already on disk.
+      console.log('   POE_AI_ALL_TREES not set — pruning the already-downloaded pob-data in place...');
+      try {
+        await pruneUnneededArtifacts(dataDir);
+        await pruneTreeData(dataDir, { allTrees: false });
+      } catch (pruneError) {
+        console.warn(`⚠️  Failed to prune pob-data (non-fatal): ${pruneError.message}`);
+      }
+      await writeFile(marker, `${JSON.stringify({ downloadedAt: new Date().toISOString(), allTrees: false })}\n`);
+      return { skipped: false, prunedInPlace: true };
+    }
+
+    console.log(
+      '   POE_AI_ALL_TREES=1 requested but the existing pob-data was pruned to the current patch — ' +
+        'forcing a fresh re-download to restore every historical tree version...'
+    );
+    // Falls through to the normal download flow below, which removes and
+    // re-fetches `dataDir` from scratch.
   }
 
   try {
@@ -159,13 +206,18 @@ export async function downloadPob({
     // download, so these are caught and logged rather than propagated.
     try {
       await pruneUnneededArtifacts(dataDir);
-      await pruneTreeData(dataDir);
+      await pruneTreeData(dataDir, { allTrees: requestedAllTrees });
     } catch (pruneError) {
       console.warn(`⚠️  Failed to prune pob-data (non-fatal): ${pruneError.message}`);
     }
 
     // Only written once extraction has fully succeeded — see downloadCompleteMarkerPath.
-    await writeFile(marker, `${new Date().toISOString()}\n`);
+    // Records `allTrees` so a later run can tell a pruned install apart from a full
+    // one and react correctly (see the marker-mismatch handling above).
+    await writeFile(
+      marker,
+      `${JSON.stringify({ downloadedAt: new Date().toISOString(), allTrees: requestedAllTrees })}\n`
+    );
 
     console.log(`✅ Path of Building downloaded to ${dataDir}`);
     console.log('   This will be used as a fallback if local PoB installation is not found.');
@@ -303,5 +355,14 @@ export async function pruneUnneededArtifacts(dataDir = POB_DATA_DIR) {
 // imported by a test.
 const isMainModule = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
-  downloadPob();
+  // downloadPob() itself never throws (a network failure is a caught,
+  // logged, non-fatal `{ skipped: false, error }`) -- that was fine for its
+  // old life as an optional postinstall step, but `poe-ai init`
+  // (downloads.ts) spawns this script as a child process and takes a zero
+  // exit code as its ONLY success signal. Without this, a real download
+  // failure during `poe-ai init --plugins=pob` would exit 0 and init would
+  // report success while plugin-pob has no pob-data at all.
+  downloadPob().then((result) => {
+    if (result?.error) process.exitCode = 1;
+  });
 }

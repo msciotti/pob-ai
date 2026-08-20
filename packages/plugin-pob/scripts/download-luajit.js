@@ -102,8 +102,10 @@ if (isMainModule) {
   }
 
   // Prefer a system-installed LuaJIT (apt/brew) over building from source --
-  // no compiler needed, and this is the documented droplet path.
-  const systemLuajit = detectSystemLuajit();
+  // no compiler needed, and this is the documented droplet path. Some
+  // distros/package managers expose a versioned binary name instead of (or
+  // alongside) the bare `luajit` symlink.
+  const systemLuajit = detectSystemLuajit(['luajit', 'luajit-2.1', 'luajit2.1']);
   if (systemLuajit) {
     console.log(`✅ Using system LuaJIT: ${systemLuajit.path}`);
     console.log(`   ${systemLuajit.version}`);

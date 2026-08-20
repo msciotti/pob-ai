@@ -67,6 +67,9 @@ importers:
       '@poe-ai/plugin-archetypes':
         specifier: workspace:*
         version: link:../plugin-archetypes
+      '@poe-ai/plugin-crafting':
+        specifier: workspace:*
+        version: link:../plugin-crafting
       '@poe-ai/plugin-ninja':
         specifier: workspace:*
         version: link:../plugin-ninja

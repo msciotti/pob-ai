@@ -60,6 +60,39 @@ describe('Deallocate Passive', () => {
     expect(info.allocated).toBe(false);
   });
 
+  it('deallocating an upstream notable cascades to a keystone reachable only through it', async () => {
+    await loadTestBuild(runtime);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rt = runtime as any;
+
+    // Verified empirically against the shared test build: allocating the "Resolute
+    // Technique" keystone auto-paths through the "Shaper" notable, which is this
+    // build's sole connector to that branch of the tree — nothing else needs it. This
+    // is the highest-risk path for deallocate_passive: DeallocNode() must cascade to
+    // every node that becomes unreachable, not just the node named in the request.
+    await runtime.allocatePassive('Resolute Technique', true);
+
+    let nodes: Array<{ name: string }> = await rt.getAllocatedNodes();
+    expect(nodes.some((n) => n.name === 'Shaper')).toBe(true);
+    expect(nodes.some((n) => n.name === 'Resolute Technique')).toBe(true);
+    const countWithFullChain = nodes.length;
+
+    await runtime.deallocatePassive('Shaper');
+
+    nodes = await rt.getAllocatedNodes();
+    expect(nodes.some((n) => n.name === 'Shaper')).toBe(false);
+    // The real regression to guard against: only asserting the target node (Shaper) is
+    // gone would miss a broken/partial cascade. Resolute Technique was only reachable
+    // through Shaper, so it must be gone too — not just still-orphaned-but-allocated.
+    expect(nodes.some((n) => n.name === 'Resolute Technique')).toBe(false);
+    expect(nodes.length).toBeLessThan(countWithFullChain);
+
+    const rtInfo = await rt.getNodeInfo('Resolute Technique');
+    expect(rtInfo.allocated).toBe(false);
+    console.log(`   Allocated nodes: ${countWithFullChain} (full chain) → ${nodes.length} (after cascade)`);
+  });
+
   it('deallocating an already-deallocated node is idempotent, not an error', async () => {
     await loadTestBuild(runtime);
 

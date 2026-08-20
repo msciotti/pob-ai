@@ -72,4 +72,38 @@ describe('get_passive_info', () => {
     expect(result.isError).toBeUndefined();
     expect(result.content[0].text).not.toContain('Allocated in current build');
   });
+
+  it('checks allocation against the wiki-resolved page title, not the raw input, for a fuzzy-matched name', async () => {
+    const runtime = { getNodeInfo: vi.fn().mockResolvedValue({ allocated: true }) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ctx = makeCtx({ pobRuntime: runtime as any });
+    // The wiki resolves this loosely-cased input to the canonical page title
+    // "Resolute Technique" (FAKE_PAGE_RESPONSE) — getNodeInfo must be called with that
+    // resolved title, not the raw "resolute technique" the user typed, since PoB's
+    // getNodeInfo requires an exact tree-node-name match.
+    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_PAGE_RESPONSE);
+
+    const result = await getPassiveInfoTool.handler({ passiveName: 'resolute technique' }, ctx);
+
+    expect(result.content[0].text).toContain('**Allocated in current build:** Yes');
+    expect(runtime.getNodeInfo).toHaveBeenCalledWith('Resolute Technique');
+    expect(runtime.getNodeInfo).not.toHaveBeenCalledWith('resolute technique');
+  });
+
+  it('omits the allocation line in the search-fallback branch, where there is no single resolved title', async () => {
+    const runtime = { getNodeInfo: vi.fn() };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ctx = makeCtx({ pobRuntime: runtime as any });
+    (ctx.http.get as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ query: { pages: { '-1': { title: 'Resolute Technique', missing: '' } } } })
+      .mockResolvedValueOnce({
+        query: { search: [{ title: 'Resolute Technique', snippet: 'Never deal critical strikes.' }] },
+      });
+
+    const result = await getPassiveInfoTool.handler({ passiveName: 'resolute technique' }, ctx);
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).not.toContain('Allocated in current build');
+    expect(runtime.getNodeInfo).not.toHaveBeenCalled();
+  });
 });

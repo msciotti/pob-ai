@@ -41,11 +41,11 @@
   "scalingVectors": [
     {
       "mechanic": "Maximum Life",
-      "explanation": "RF's self-damage-per-second scales directly off a percentage of your maximum Life (roughly 90%) before mitigation, so building Life isn't just survivability — it's your own damage output against enemies standing in the RF radius."
+      "explanation": "RF's self-damage-per-second scales directly off a percentage of your maximum Life (roughly 0.9% per second, i.e. base_nonlethal_fire_damage_%_of_maximum_life_taken_per_minute / 6000 in PoB's data) before mitigation, so building Life isn't just survivability — it's your own damage output against enemies standing in the RF radius."
     },
     {
       "mechanic": "Maximum Energy Shield",
-      "explanation": "RF also scales off maximum Energy Shield (roughly 70%/second), so hybrid Life/ES gear — and the rarer CI/ES-based variant — still contributes directly to clear/boss damage, not just to defense."
+      "explanation": "RF also scales off maximum Energy Shield (roughly 0.7% per second, the ES counterpart of the same per-minute self-damage formula), so hybrid Life/ES gear — and the rarer CI/ES-based variant — still contributes directly to clear/boss damage, not just to defense."
     },
     {
       "mechanic": "Increased Burning Damage / Damage over Time multiplier / gem level",

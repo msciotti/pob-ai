@@ -101,6 +101,25 @@ describe('classifyBuild', () => {
     }
   });
 
+  it('treats BleedDPS: 0 as undecidable (a PoB calc-order quirk), not a hard miss — still ranks phys-dot-bleed at reduced confidence rather than excluding it', () => {
+    const withBleedDPS: BuildProfile = {
+      mainSkill: { name: 'Lacerate', gemTags: ['area', 'attack', 'melee', 'physical'] },
+      stats: { BleedDPS: 500000, TotalDPS: 600000 },
+    };
+    const withZeroBleedDPS: BuildProfile = {
+      mainSkill: { name: 'Lacerate', gemTags: ['area', 'attack', 'melee', 'physical'] },
+      stats: { BleedDPS: 0, TotalDPS: 600000 },
+    };
+
+    const confirmed = classifyBuild(withBleedDPS, entries).find((m) => m.slug === 'phys-dot-bleed');
+    const zeroDps = classifyBuild(withZeroBleedDPS, entries).find((m) => m.slug === 'phys-dot-bleed');
+
+    expect(confirmed).toBeDefined();
+    expect(zeroDps).toBeDefined(); // not excluded — the main-skill signal alone still clears the floor
+    expect(zeroDps!.confidence).toBeGreaterThan(0.15);
+    expect(zeroDps!.confidence).toBeLessThan(confirmed!.confidence); // reduced relative to a confirmed bleed
+  });
+
   it('returns no (or only very low-confidence) matches for an out-of-scope build', () => {
     const profile: BuildProfile = {
       mainSkill: { name: 'Tornado Shot', gemTags: ['bow', 'attack', 'projectile'] },

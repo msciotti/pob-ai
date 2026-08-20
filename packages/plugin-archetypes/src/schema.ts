@@ -175,26 +175,46 @@ export type FailureMode = z.infer<typeof FailureModeSchema>;
 
 // ── Top-level entry ──────────────────────────────────────────────────────────
 
-export const ArchetypeEntrySchema = z.object({
-  slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'slug must be kebab-case'),
-  name: z.string().min(1),
-  summary: z.string().min(1),
+export const ArchetypeEntrySchema = z
+  .object({
+    slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'slug must be kebab-case'),
+    name: z.string().min(1),
+    summary: z.string().min(1),
 
-  identitySignature: z.object({
-    signals: z.array(IdentitySignalSchema).min(1),
-  }),
+    identitySignature: z.object({
+      signals: z.array(IdentitySignalSchema).min(1),
+    }),
 
-  scalingVectors: z.array(ScalingVectorSchema).min(1),
-  deadStats: z.array(DeadStatSchema),
+    scalingVectors: z.array(ScalingVectorSchema).min(1),
+    deadStats: z.array(DeadStatSchema),
 
-  defensiveProfile: DefensiveProfileSchema,
+    defensiveProfile: DefensiveProfileSchema,
 
-  failureModes: z.array(FailureModeSchema).min(1),
+    failureModes: z.array(FailureModeSchema).min(1),
 
-  provenance: ProvenanceSchema,
-  /** Semver range this entry is believed valid for, e.g. "3.29.x" or ">=3.25.0 <3.30.0" */
-  patchValidity: z.string().min(1),
-  /** Patch this entry was last hand-reviewed against, e.g. "3.29" */
-  lastReviewedPatch: z.string().min(1),
-});
+    provenance: ProvenanceSchema,
+    /** Semver range this entry is believed valid for, e.g. "3.29.x" or ">=3.25.0 <3.30.0" */
+    patchValidity: z.string().min(1),
+    /** Patch this entry was last hand-reviewed against, e.g. "3.29" */
+    lastReviewedPatch: z.string().min(1),
+  })
+  .superRefine((entry, ctx) => {
+    // The classifier (classifier.ts) always treats uniqueItem signals as bonus-only,
+    // regardless of their `required` flag — they can never gate confidence on their
+    // own. So "at least one required signal" only counts if it's a non-uniqueItem
+    // signal; otherwise an entry could clear the classifier's confidence floor purely
+    // off unique-item bonuses; nothing about the entry would actually be load-bearing.
+    const hasRealRequiredSignal = entry.identitySignature.signals.some(
+      (s) => s.required && s.kind !== 'uniqueItem'
+    );
+    if (!hasRealRequiredSignal) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'identitySignature must include at least one required signal that is not a uniqueItem ' +
+          '(uniqueItem signals are always scored as bonus-only and can never gate confidence alone)',
+        path: ['identitySignature', 'signals'],
+      });
+    }
+  });
 export type ArchetypeEntry = z.infer<typeof ArchetypeEntrySchema>;

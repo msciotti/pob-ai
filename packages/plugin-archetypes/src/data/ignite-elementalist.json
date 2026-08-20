@@ -39,7 +39,7 @@
   "scalingVectors": [
     {
       "mechanic": "Base Fire hit damage",
-      "explanation": "Ignite magnitude derives from the fire damage of the hit that caused it (roughly 20% of that hit's fire damage per second by default, over 4 seconds), so hit-scaling fire damage still matters — as the base the ignite reads from, the same way physical hit damage feeds a bleed tick."
+      "explanation": "Ignite magnitude derives from the fire damage of the hit that caused it (90% of that hit's fire damage per second by default, over a 4 second base duration — PoB's IgnitePercentBase/IgniteDurationBase), so hit-scaling fire damage still matters — as the base the ignite reads from, the same way physical hit damage feeds a bleed tick."
     },
     {
       "mechanic": "Increased Burning Damage / Damage over Time multiplier",

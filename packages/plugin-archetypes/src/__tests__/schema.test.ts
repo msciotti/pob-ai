@@ -31,8 +31,13 @@ describe('archetype data files', () => {
         expect(entry.lastReviewedPatch).toBe('3.29');
       });
 
-      it('has at least one required identity signal', () => {
-        expect(entry.identitySignature.signals.some((s) => s.required)).toBe(true);
+      it('has at least one required identity signal that is not a bonus-only uniqueItem', () => {
+        // Matches the classifier's actual counting (classifier.ts scoreEntry): uniqueItem
+        // signals are always bonus-only regardless of their `required` flag, so a "required"
+        // uniqueItem alone would not give the classifier a real gate.
+        expect(
+          entry.identitySignature.signals.some((s) => s.required && s.kind !== 'uniqueItem')
+        ).toBe(true);
       });
 
       it('every failureMode statCheck references a plausible PoB stat name', () => {
@@ -68,6 +73,47 @@ describe('archetype data files', () => {
       name: 'x',
       summary: 'x',
       identitySignature: { signals: [{ kind: 'mainSkill', weight: 1, required: true, description: 'x' }] },
+      scalingVectors: [{ mechanic: 'x', explanation: 'x' }],
+      deadStats: [],
+      defensiveProfile: { layers: ['x'], characteristicWeaknesses: [] },
+      failureModes: [{ symptom: 'x', diagnosis: 'x', fix: 'x' }],
+      provenance: 'hand-curated',
+      patchValidity: '3.29.x',
+      lastReviewedPatch: '3.29',
+    };
+    expect(ArchetypeEntrySchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('rejects an entry whose only required signal is a uniqueItem', () => {
+    const bad = {
+      slug: 'test-entry',
+      name: 'x',
+      summary: 'x',
+      identitySignature: {
+        signals: [
+          { kind: 'uniqueItem', weight: 1, required: true, itemNames: ['Some Unique'], description: 'x' },
+          { kind: 'keystone', weight: 0.5, required: false, keystoneNames: ['x'], description: 'x' },
+        ],
+      },
+      scalingVectors: [{ mechanic: 'x', explanation: 'x' }],
+      deadStats: [],
+      defensiveProfile: { layers: ['x'], characteristicWeaknesses: [] },
+      failureModes: [{ symptom: 'x', diagnosis: 'x', fix: 'x' }],
+      provenance: 'hand-curated',
+      patchValidity: '3.29.x',
+      lastReviewedPatch: '3.29',
+    };
+    expect(ArchetypeEntrySchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('rejects an entry with no required signal at all', () => {
+    const bad = {
+      slug: 'test-entry',
+      name: 'x',
+      summary: 'x',
+      identitySignature: {
+        signals: [{ kind: 'keystone', weight: 0.5, required: false, keystoneNames: ['x'], description: 'x' }],
+      },
       scalingVectors: [{ mechanic: 'x', explanation: 'x' }],
       deadStats: [],
       defensiveProfile: { layers: ['x'], characteristicWeaknesses: [] },

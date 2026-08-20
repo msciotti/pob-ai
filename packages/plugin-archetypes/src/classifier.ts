@@ -42,6 +42,18 @@ function equalsCaseInsensitive(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
 
+/**
+ * PoB's headless calc can return exactly 0 for DPS-family stats (BleedDPS, IgniteDPS,
+ * PoisonDPS, ...) depending on which socket group PoB currently treats as the "main"
+ * skill — independent of whether the relevant ailment is actually part of the build.
+ * A 0 here is "we can't tell" (like the stat being absent entirely), not "confirmed
+ * zero" — treating it as a hard false would let a calc-order quirk fail a required
+ * signal the same way as an archetype that's genuinely absent from the build.
+ */
+function isUndecidableZero(stat: string, value: number): boolean {
+  return value === 0 && stat.endsWith('DPS');
+}
+
 function describeSignal(signal: IdentitySignal): string {
   switch (signal.kind) {
     case 'mainSkill': {
@@ -96,6 +108,7 @@ function evaluateSignal(signal: IdentitySignal, profile: BuildProfile): boolean 
       const stats = profile.stats;
       if (!stats || !(signal.stat in stats)) return undefined;
       const value = stats[signal.stat];
+      if (isUndecidableZero(signal.stat, value)) return undefined;
       if (signal.op === 'gte') return value >= signal.threshold;
       if (signal.op === 'lte') return value <= signal.threshold;
       // ratioAtLeast
@@ -108,18 +121,38 @@ function evaluateSignal(signal: IdentitySignal, profile: BuildProfile): boolean 
 /**
  * Scores one archetype entry against a build profile.
  *
- * Required signals gate confidence: `requiredScore` is the weighted fraction of required
- * signals that matched, and the final confidence is `requiredScore * (0.6 + 0.4 *
- * supportingScore)` — missing required signals hurt proportionally to their weight, and
- * even a perfect supporting score can't push confidence past what the required signals
- * allow. Entries with no required signals fall back to the supporting score alone.
- * uniqueItem signals never gate or penalize — they only add a bonus when matched
- * (signature uniques are optional evidence, not identity-defining).
+ * `evaluateSignal` returns a tri-state: `true` (matched), `false` (decidably not
+ * matched — we have the data and it doesn't fit), or `undefined` (undecidable — we
+ * don't have enough data to say either way, e.g. a missing stat, or a DPS-family stat
+ * that reads 0 due to a PoB calc-order quirk rather than a confirmed absence). Only
+ * `false` counts against a signal's pool; `undefined` signals are excluded from both
+ * the numerator and denominator entirely — "we don't know" must never score the same
+ * as "we checked and it's not there".
+ *
+ * Required signals gate confidence: `requiredScore` is the weighted fraction of
+ * *decidable* required signals that matched, and the final confidence is
+ * `requiredScore * (0.6 + 0.4 * supportingScore)` — a decidably-false required signal
+ * hurts proportionally to its weight, and even a perfect supporting score can't push
+ * confidence past what the required signals allow. If an entry defines required
+ * signals but NONE of them were decidable for this build (no usable data at all),
+ * `requiredScore` falls back to 0, not 1 — otherwise a completely empty profile would
+ * score every archetype as a full match by default. Entries with no required signals
+ * in their schema at all (shouldn't happen — the schema requires at least one) fall
+ * back to the supporting score alone.
+ *
+ * uniqueItem signals never gate, penalize, or even count as "undecided" — they only
+ * ever add a small bonus when matched (signature uniques are optional evidence, not
+ * identity-defining). This is deliberate and load-bearing: it's what lets a build with
+ * zero required/supporting signals evaluated still land safely at 0 confidence rather
+ * than being pushed over the floor by unique-item bonuses alone — see the schema-level
+ * "at least one required signal" constraint in schema.ts, which guarantees every entry
+ * has a real, non-bonus gate that a uniqueItem match alone can never satisfy.
  */
 function scoreEntry(entry: ArchetypeEntry, profile: BuildProfile): ArchetypeMatch {
   const matchedSignals: string[] = [];
   const missingSignals: string[] = [];
 
+  let requiredSignalCount = 0;
   let requiredTotal = 0;
   let requiredMatched = 0;
   let supportingTotal = 0;
@@ -136,6 +169,13 @@ function scoreEntry(entry: ArchetypeEntry, profile: BuildProfile): ArchetypeMatc
         matchedSignals.push(label);
       }
       // Unmatched or undecidable uniqueItem signals are silently skipped — optional evidence.
+      continue;
+    }
+
+    if (signal.required) requiredSignalCount++;
+
+    if (matched === undefined) {
+      // Undecidable — excluded entirely, not counted as a miss.
       continue;
     }
 
@@ -158,11 +198,12 @@ function scoreEntry(entry: ArchetypeEntry, profile: BuildProfile): ArchetypeMatc
     }
   }
 
-  const requiredScore = requiredTotal > 0 ? requiredMatched / requiredTotal : 1;
+  const requiredScore =
+    requiredSignalCount === 0 ? 1 : requiredTotal > 0 ? requiredMatched / requiredTotal : 0;
   const supportingScore = supportingTotal > 0 ? supportingMatched / supportingTotal : 0;
 
   let confidence =
-    requiredTotal > 0 ? requiredScore * (0.6 + 0.4 * supportingScore) : supportingScore;
+    requiredSignalCount > 0 ? requiredScore * (0.6 + 0.4 * supportingScore) : supportingScore;
   confidence = Math.min(1, confidence + bonus * 0.15);
 
   return {

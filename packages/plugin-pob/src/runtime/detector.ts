@@ -118,7 +118,7 @@ export async function getPobPath(configPath?: string): Promise<string> {
     const headlessPath = join(bundledPath, 'HeadlessWrapper.lua');
     try {
       await access(headlessPath);
-      console.log('Using bundled Path of Building installation');
+      console.error('Using bundled Path of Building installation');
       return bundledPath;
     } catch {
       // Bundled PoB exists but is incomplete

@@ -89,9 +89,9 @@ export class LuaJITRuntime implements PobRuntime {
         ? this.dkjsonPath
         : join(process.cwd(), this.dkjsonPath);
 
-      console.log(`Using LuaJIT: ${this.luajitPath}`);
-      console.log(`Starting PoB at: ${this.pobPath}`);
-      console.log(`Using dkjson from: ${this.dkjsonPath}`);
+      console.error(`Using LuaJIT: ${this.luajitPath}`);
+      console.error(`Starting PoB at: ${this.pobPath}`);
+      console.error(`Using dkjson from: ${this.dkjsonPath}`);
 
       try {
         this.process = spawn(absoluteLuajitPath, [bridgeScript, this.pobPath, absoluteDkjsonPath], {
@@ -127,12 +127,12 @@ export class LuaJITRuntime implements PobRuntime {
           const response = JSON.parse(line) as Record<string, unknown>;
 
           if (response['status'] === 'loading') {
-            console.log(response['message']);
+            console.error(response['message']);
             return;
           }
 
           if (response['status'] === 'ready') {
-            console.log(response['message']);
+            console.error(response['message']);
             resolve();
             return;
           }
@@ -219,7 +219,7 @@ export class LuaJITRuntime implements PobRuntime {
 
   async newBuild(): Promise<void> {
     const response = await this.sendCommand('newBuild');
-    console.log(response['message']);
+    console.error(response['message']);
   }
 
   /**
@@ -231,7 +231,7 @@ export class LuaJITRuntime implements PobRuntime {
       name: buildName,
       preserveState: false,
     });
-    console.log(response['message']);
+    console.error(response['message']);
   }
 
   /**
@@ -243,7 +243,7 @@ export class LuaJITRuntime implements PobRuntime {
       name: buildName,
       preserveState: false,
     });
-    console.log(response['message']);
+    console.error(response['message']);
   }
 
   async getBuildStats(): Promise<Record<string, number>> {
@@ -263,10 +263,10 @@ export class LuaJITRuntime implements PobRuntime {
     }
 
     const message = (response['message'] as string | undefined) || `Allocated ${nodeName}`;
-    console.log(message);
+    console.error(message);
 
     if (response['debug']) {
-      console.log('DEBUG INFO:', JSON.stringify(response['debug'], null, 2));
+      console.error('DEBUG INFO:', JSON.stringify(response['debug'], null, 2));
     }
 
     return { success: true, message };
@@ -306,7 +306,7 @@ export class LuaJITRuntime implements PobRuntime {
     if (!response['success']) {
       throw new Error((response['error'] as string) || 'Failed to set custom mods');
     }
-    console.log(response['message']);
+    console.error(response['message']);
   }
 
   async rebuildPaths(): Promise<void> {
@@ -395,7 +395,7 @@ export class LuaJITRuntime implements PobRuntime {
     if (!response['success']) {
       throw new Error((response['error'] as string) || 'Failed to equip item');
     }
-    console.log(response['message']);
+    console.error(response['message']);
   }
 
   async unequipItem(slotName: string): Promise<void> {
@@ -403,7 +403,7 @@ export class LuaJITRuntime implements PobRuntime {
     if (!response['success']) {
       throw new Error((response['error'] as string) || 'Failed to unequip item');
     }
-    console.log(response['message']);
+    console.error(response['message']);
   }
 
   async activateFlask(slotName: string, active: boolean = true): Promise<void> {
@@ -411,7 +411,7 @@ export class LuaJITRuntime implements PobRuntime {
     if (!response['success']) {
       throw new Error((response['error'] as string) || 'Failed to activate flask');
     }
-    console.log(response['message']);
+    console.error(response['message']);
   }
 
   async getEquippedItems(): Promise<Array<{
@@ -443,7 +443,7 @@ export class LuaJITRuntime implements PobRuntime {
     if (!response['success']) {
       throw new Error((response['error'] as string) || 'Failed to add socket group');
     }
-    console.log(response['message']);
+    console.error(response['message']);
   }
 
   async clearSocketGroups(): Promise<void> {
@@ -451,7 +451,7 @@ export class LuaJITRuntime implements PobRuntime {
     if (!response['success']) {
       throw new Error((response['error'] as string) || 'Failed to clear socket groups');
     }
-    console.log(response['message']);
+    console.error(response['message']);
   }
 
   async getSocketGroups(): Promise<Array<{

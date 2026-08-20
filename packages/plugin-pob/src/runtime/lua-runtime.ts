@@ -111,7 +111,7 @@ export class LuaRuntime {
       // Load minimal PoB initialization script
       await this.loadMinimalPobInit();
 
-      console.log('PoB Lua runtime initialized successfully');
+      console.error('PoB Lua runtime initialized successfully');
     } catch (error) {
       throw new Error(`Failed to initialize PoB Lua runtime: ${error}`);
     }

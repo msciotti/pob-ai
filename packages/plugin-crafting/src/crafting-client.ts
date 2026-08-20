@@ -324,13 +324,26 @@ export class CraftingClient {
       results = await this.getInfluencedMods(influence, itemClass);
     } else {
       const itemClasses = await getItemClasses();
-      const classKey = resolveItemClassKey(itemClasses, itemClass) ?? 'Ring';
+      // Default to "ring" only when itemClass was omitted entirely -- a typo'd
+      // or unrecognized class must NOT silently fall back to plausible-looking
+      // Ring data, it should return nothing.
+      const classKey = resolveItemClassKey(itemClasses, itemClass ?? 'ring');
+      if (!classKey) {
+        this.ctx.logger.warn(`[crafting] Unknown item class "${itemClass}" -- returning no results`);
+        return [];
+      }
       const tags = await getItemClassTags(this.ctx, classKey);
       const mods = await getMods();
 
       results = [];
       for (const mod of Object.values(mods)) {
         if (mod.domain !== 'item') continue;
+        // Essence-only mods (e.g. "of the Essence") have no real spawn tag and
+        // would otherwise only be excluded incidentally because their only
+        // spawn_weights entry is "default":0 -- check the flag explicitly so a
+        // future essence-only mod with a nonzero non-default weight can't leak
+        // into normal search results.
+        if (mod.is_essence_only) continue;
         if (mod.generation_type !== 'prefix' && mod.generation_type !== 'suffix') continue;
         if (!mod.text) continue;
 
@@ -363,11 +376,31 @@ export class CraftingClient {
     const key = influence.trim().toLowerCase();
     const itemClasses = await getItemClasses();
     const mods = await getMods();
-    const classKey = resolveItemClassKey(itemClasses, itemClass);
+
+    // Resolve itemClass once, up front, for both branches below. An
+    // unrecognized item class must return [] (not silently ignore the
+    // filter) -- only an OMITTED item class means "no class filter".
+    let classKey: string | undefined;
+    if (itemClass) {
+      classKey = resolveItemClassKey(itemClasses, itemClass);
+      if (!classKey) {
+        this.ctx.logger.warn(`[crafting] Unknown item class "${itemClass}" -- returning no results`);
+        return [];
+      }
+    }
 
     const codename = INFLUENCE_CODENAMES[key];
     if (codename) {
-      const classInfluenceTags = classKey ? itemClasses[classKey]?.influence_tags : undefined;
+      // classInfluenceTags stays undefined ONLY when no itemClass was given
+      // (meaning: don't filter by class at all). Whenever a class WAS given
+      // and resolved, this is always an array -- possibly empty, if that
+      // class can't roll influence mods at all (e.g. Belt) -- so the
+      // `.includes()` check below correctly yields zero matches for it,
+      // rather than falling through as "no filter" the way an `undefined`
+      // fallback would.
+      const classInfluenceTags: string[] | undefined = classKey
+        ? itemClasses[classKey]?.influence_tags ?? []
+        : undefined;
 
       const results: ModResult[] = [];
       for (const mod of Object.values(mods)) {

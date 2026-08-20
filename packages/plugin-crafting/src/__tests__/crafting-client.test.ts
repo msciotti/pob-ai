@@ -187,6 +187,19 @@ describe('CraftingClient.searchMods', () => {
     expect(results).toEqual([]);
   });
 
+  it('excludes essence-only mods via the explicit flag, not just incidental zero weight', async () => {
+    // EssenceOnlyLeakTest is_essence_only:true but has a nonzero, non-default
+    // ("ring": 500) spawn weight -- if the is_essence_only check were ever
+    // dropped in favour of relying on weight alone, this mod would leak into
+    // ring search results.
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.searchMods('essence-only leak', 'ring');
+
+    expect(results).toEqual([]);
+  });
+
   it('excludes corrupted-implicit mods from normal (prefix/suffix) search', async () => {
     const { CraftingClient } = await import('../crafting-client.js');
     const client = new CraftingClient(makeCtx());
@@ -214,6 +227,46 @@ describe('CraftingClient.searchMods', () => {
 
     const cached = ctx.cache.get('crafting:classtags:3.29.3.1.4:Ring');
     expect(cached).toBeDefined();
+  });
+
+  it('derives the Boots tag set as the intersection across bases -- str_armour/dex_armour stripped', async () => {
+    // BootsStr1 has tags [boots, armour, str_armour, default] and BootsDex1 has
+    // [boots, armour, dex_armour, default] -- only the tags shared by every
+    // base of the class should survive into the resolved tag set.
+    const { CraftingClient } = await import('../crafting-client.js');
+    const ctx = makeCtx();
+    const client = new CraftingClient(ctx);
+
+    await client.searchMods('', 'boots');
+
+    const cached = ctx.cache.get<string[]>('crafting:classtags:3.29.3.1.4:Boots');
+    expect(cached).toBeDefined();
+    expect([...(cached as string[])].sort()).toEqual(['armour', 'boots', 'default']);
+  });
+
+  it('resolves spawn weight via the FIRST matching tag, not the highest weight among matches', async () => {
+    // FirstMatchOrderTest's spawn_weights lists "armour":100 before "boots":900.
+    // Both tags are in the resolved Boots tag set, so a correct
+    // first-match-wins implementation returns 100; a max-weight
+    // implementation would incorrectly return 900.
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.searchMods('ordering', 'boots');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].weight).toBe(100);
+  });
+
+  it('returns an empty array and warns for an unresolvable item class, instead of falling back to Ring', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const ctx = makeCtx();
+    const client = new CraftingClient(ctx);
+
+    const results = await client.searchMods('strength', 'not-a-real-item-class');
+
+    expect(results).toEqual([]);
+    expect(ctx.logger.warn).toHaveBeenCalled();
   });
 });
 
@@ -292,6 +345,31 @@ describe('CraftingClient.getInfluencedMods', () => {
     const names = results.map((m) => m.name);
     expect(names).toContain("The Shaper's");
     expect(names).toContain("Shaper's");
+  });
+
+  it('CRITICAL: returns [] for a class that resolves but cannot roll influence mods at all (Belt), instead of leaking other classes\' mods', async () => {
+    // Belt has no `influence_tags` in item_classes.min.json at all (it's not
+    // one of the classes that can be shaper/elder/etc. influenced). Before the
+    // fix, `classInfluenceTags` was `undefined` in this case -- indistinguishable
+    // from "itemClass omitted" -- so the filter was skipped entirely and every
+    // other class's shaper mods (Boots', Ring's) leaked into "belt" results.
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.getInfluencedMods('shaper', 'belt');
+
+    expect(results).toEqual([]);
+  });
+
+  it('returns an empty array and warns for an unresolvable item class', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const ctx = makeCtx();
+    const client = new CraftingClient(ctx);
+
+    const results = await client.getInfluencedMods('shaper', 'not-a-real-item-class');
+
+    expect(results).toEqual([]);
+    expect(ctx.logger.warn).toHaveBeenCalled();
   });
 
   it('returns an empty array and warns for an unrecognized influence', async () => {

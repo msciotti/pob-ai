@@ -39,6 +39,22 @@ const ECONOMY_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const INDEX_STATE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
 const BASE_URL = 'https://poe.ninja';
+const USER_AGENT = 'poe-ai/1.0 (github.com/msciotti/poe-ai)';
+
+/**
+ * poe.ninja can rotate a league's snapshot version well inside our 15-minute
+ * index-state TTL. When that happens every economy endpoint 404s against
+ * the now-stale `{version}` in the path. Detect that specific failure so we
+ * can invalidate the cached index-state and retry once with a fresh version,
+ * rather than surfacing every call as an error until the TTL naturally expires.
+ */
+function isNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const status =
+    (err as { response?: { status?: number } }).response?.status ??
+    (err as { status?: number }).status;
+  return status === 404;
+}
 
 /** Categories backed by stash/{version}/currency/overview */
 const CURRENCY_CATEGORIES: ItemCategory[] = ['Currency', 'Fragment'];
@@ -110,23 +126,55 @@ export class NinjaClient {
     category: ItemCategory,
     league: string
   ): Promise<RawNinjaEconomyEntry[]> {
-    const cacheKey = this.economyCacheKey(category, league);
+    // Resolve to the canonical league displayName first so the cache key is
+    // stable regardless of how the caller spelled/cased the league name
+    // (e.g. "standard" and "Standard" now share one cache entry/HTTP call).
+    const { version, displayName } = await this.resolveLeague(league);
+
+    const cacheKey = this.economyCacheKey(category, displayName);
     const cached = this.ctx.cache.get<RawNinjaEconomyEntry[]>(cacheKey);
     if (cached) return cached;
 
-    const { version, displayName } = await this.resolveLeague(league);
-
-    let lines: RawNinjaEconomyEntry[];
-    if ((CURRENCY_CATEGORIES as string[]).includes(category)) {
-      lines = await this.fetchCurrencyLines(version, displayName, category);
-    } else if ((EXCHANGE_ONLY_CATEGORIES as string[]).includes(category)) {
-      lines = await this.fetchExchangeLines(version, displayName, category);
-    } else {
-      lines = await this.fetchItemLines(version, displayName, category);
-    }
+    const lines = await this.fetchEconomyLinesWithRetry(category, version, displayName, league);
 
     this.ctx.cache.set(cacheKey, lines, ECONOMY_TTL_MS);
     return lines;
+  }
+
+  private async fetchEconomyLinesForVersion(
+    category: ItemCategory,
+    version: string,
+    leagueDisplayName: string
+  ): Promise<RawNinjaEconomyEntry[]> {
+    if ((CURRENCY_CATEGORIES as string[]).includes(category)) {
+      return this.fetchCurrencyLines(version, leagueDisplayName, category);
+    }
+    if ((EXCHANGE_ONLY_CATEGORIES as string[]).includes(category)) {
+      return this.fetchExchangeLines(version, leagueDisplayName, category);
+    }
+    return this.fetchItemLines(version, leagueDisplayName, category);
+  }
+
+  /**
+   * Fetch economy lines for an already-resolved version, and if that 404s
+   * (stale snapshot version — poe.ninja rotated it since we cached
+   * index-state), invalidate the cached index-state, re-resolve the league,
+   * and retry exactly once with the fresh version before giving up.
+   */
+  private async fetchEconomyLinesWithRetry(
+    category: ItemCategory,
+    version: string,
+    leagueDisplayName: string,
+    league: string
+  ): Promise<RawNinjaEconomyEntry[]> {
+    try {
+      return await this.fetchEconomyLinesForVersion(category, version, leagueDisplayName);
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
+      this.ctx.cache.delete(this.indexStateCacheKey());
+      const fresh = await this.resolveLeague(league);
+      return this.fetchEconomyLinesForVersion(category, fresh.version, fresh.displayName);
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -169,16 +217,20 @@ export class NinjaClient {
   }
 
   private async fetchIndexState(): Promise<NinjaIndexState> {
-    const cacheKey = `ninja:index-state:${this.ctx.leagueState.patchVersion}`;
+    const cacheKey = this.indexStateCacheKey();
     const cached = this.ctx.cache.get<NinjaIndexState>(cacheKey);
     if (cached) return cached;
 
     const data = await this.ctx.http.get<NinjaIndexState>(
       `${BASE_URL}/poe1/api/data/index-state`,
-      { timeoutMs: 15_000 }
+      { headers: { 'User-Agent': USER_AGENT }, timeoutMs: 15_000 }
     );
     this.ctx.cache.set(cacheKey, data, INDEX_STATE_TTL_MS);
     return data;
+  }
+
+  private indexStateCacheKey(): string {
+    return `ninja:index-state:${this.ctx.leagueState.patchVersion}`;
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -192,7 +244,7 @@ export class NinjaClient {
   ): Promise<RawNinjaEconomyEntry[]> {
     const raw = await this.ctx.http.get<RawCurrencyOverviewResponse>(
       `${BASE_URL}/poe1/api/economy/stash/${version}/currency/overview`,
-      { params: { type: category, league: leagueDisplayName }, timeoutMs: 15_000 }
+      { params: { type: category, league: leagueDisplayName }, headers: { 'User-Agent': USER_AGENT }, timeoutMs: 15_000 }
     );
     const rawLines = raw?.lines ?? [];
 
@@ -225,7 +277,7 @@ export class NinjaClient {
   ): Promise<RawNinjaEconomyEntry[]> {
     const raw = await this.ctx.http.get<RawItemOverviewResponse>(
       `${BASE_URL}/poe1/api/economy/stash/${version}/item/overview`,
-      { params: { type: category, league: leagueDisplayName }, timeoutMs: 15_000 }
+      { params: { type: category, league: leagueDisplayName }, headers: { 'User-Agent': USER_AGENT }, timeoutMs: 15_000 }
     );
     const rawLines = raw?.lines ?? [];
 
@@ -245,7 +297,7 @@ export class NinjaClient {
   ): Promise<RawNinjaEconomyEntry[]> {
     const raw = await this.ctx.http.get<RawExchangeOverviewResponse>(
       `${BASE_URL}/poe1/api/economy/exchange/${version}/overview`,
-      { params: { type: category, league: leagueDisplayName }, timeoutMs: 15_000 }
+      { params: { type: category, league: leagueDisplayName }, headers: { 'User-Agent': USER_AGENT }, timeoutMs: 15_000 }
     );
     const rawLines = raw?.lines ?? [];
     const itemsById = new Map((raw?.items ?? []).map((i) => [i.id, i]));

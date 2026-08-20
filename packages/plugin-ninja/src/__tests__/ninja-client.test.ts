@@ -83,6 +83,159 @@ describe('NinjaClient — league/version resolution', () => {
   });
 });
 
+describe('NinjaClient — stale snapshot version retry', () => {
+  function notFoundError(): Error {
+    const err = new Error('Request failed with status code 404') as Error & {
+      response: { status: number };
+    };
+    err.response = { status: 404 };
+    return err;
+  }
+
+  it('invalidates cached index-state and retries once when the economy call 404s on a stale version', async () => {
+    const ctx = makeCtx();
+    let indexStateCalls = 0;
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockImplementation((url: string) => {
+      if (url.includes('index-state')) {
+        indexStateCalls++;
+        const version = indexStateCalls === 1 ? 'v-standard-stale' : 'v-standard-fresh';
+        return Promise.resolve({
+          economyLeagues: [{ name: 'Standard', url: 'standard', displayName: 'Standard' }],
+          oldEconomyLeagues: [],
+          snapshotVersions: [
+            { url: 'standard', type: 'exp', name: 'Standard', version, snapshotName: 'standard', overviewType: 0 },
+          ],
+        });
+      }
+      if (url.includes('currency/overview')) {
+        if (url.includes('v-standard-stale')) {
+          throw notFoundError();
+        }
+        return Promise.resolve({
+          lines: [{ currencyTypeName: 'Divine Orb', chaosEquivalent: 200, receive: { listing_count: 50 } }],
+        });
+      }
+      throw new Error(`Unmocked URL: ${url}`);
+    });
+
+    const client = new NinjaClient(ctx);
+    const result = await client.getItemPrice('Divine Orb', 'Currency', 'Standard');
+
+    expect(result).not.toBeNull();
+    expect(result!.chaosValue).toBe(200);
+    // Initial fetch + one retry after invalidating the cached index-state.
+    expect(indexStateCalls).toBe(2);
+    const currencyCalls = httpGet.mock.calls.filter((c: any[]) => c[0].includes('currency/overview'));
+    expect(currencyCalls).toHaveLength(2);
+    expect(currencyCalls[1][0]).toContain('v-standard-fresh');
+  });
+
+  it('does not retry more than once — a second 404 on the fresh version propagates', async () => {
+    const ctx = makeCtx();
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockImplementation((url: string) => {
+      if (url.includes('index-state')) {
+        return Promise.resolve({
+          economyLeagues: [{ name: 'Standard', url: 'standard', displayName: 'Standard' }],
+          oldEconomyLeagues: [],
+          snapshotVersions: [
+            { url: 'standard', type: 'exp', name: 'Standard', version: 'v-always-stale', snapshotName: 'standard', overviewType: 0 },
+          ],
+        });
+      }
+      if (url.includes('currency/overview')) {
+        throw notFoundError();
+      }
+      throw new Error(`Unmocked URL: ${url}`);
+    });
+
+    const client = new NinjaClient(ctx);
+    await expect(client.getItemPrice('Divine Orb', 'Currency', 'Standard')).rejects.toThrow();
+
+    const currencyCalls = httpGet.mock.calls.filter((c: any[]) => c[0].includes('currency/overview'));
+    expect(currencyCalls).toHaveLength(2); // initial attempt + exactly one retry
+  });
+
+  it('does not retry on non-404 errors (e.g. timeouts) — propagates immediately', async () => {
+    const ctx = makeCtx();
+    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
+    httpGet.mockImplementation((url: string) => {
+      if (url.includes('index-state')) {
+        return Promise.resolve({
+          economyLeagues: [{ name: 'Standard', url: 'standard', displayName: 'Standard' }],
+          oldEconomyLeagues: [],
+          snapshotVersions: [
+            { url: 'standard', type: 'exp', name: 'Standard', version: 'v-standard-1', snapshotName: 'standard', overviewType: 0 },
+          ],
+        });
+      }
+      if (url.includes('currency/overview')) {
+        throw new Error('socket hang up');
+      }
+      throw new Error(`Unmocked URL: ${url}`);
+    });
+
+    const client = new NinjaClient(ctx);
+    await expect(client.getItemPrice('Divine Orb', 'Currency', 'Standard')).rejects.toThrow('socket hang up');
+
+    const currencyCalls = httpGet.mock.calls.filter((c: any[]) => c[0].includes('currency/overview'));
+    expect(currencyCalls).toHaveLength(1); // no retry for non-404 failures
+  });
+});
+
+describe('NinjaClient — resolved-league cache keys', () => {
+  it('shares one cache entry/HTTP call regardless of the caller-supplied league casing', async () => {
+    const ctx = makeCtx();
+    const httpGet = mockHttp(ctx, {
+      '/poe1/api/data/index-state': () => INDEX_STATE,
+      '/currency/overview': () => ({ lines: [] }),
+    });
+
+    const client = new NinjaClient(ctx);
+    await client.getItemPrice('X', 'Currency', 'standard'); // lowercase
+    await client.getItemPrice('X', 'Currency', 'Standard'); // canonical
+
+    const currencyCalls = httpGet.mock.calls.filter((c: any[]) => c[0].includes('currency/overview'));
+    expect(currencyCalls).toHaveLength(1);
+  });
+
+  it('sends the resolved displayName as the league query param even when called with a differently-cased name', async () => {
+    const ctx = makeCtx();
+    const httpGet = mockHttp(ctx, {
+      '/poe1/api/data/index-state': () => INDEX_STATE,
+      '/currency/overview': () => ({ lines: [] }),
+    });
+
+    const client = new NinjaClient(ctx);
+    await client.getItemPrice('X', 'Currency', 'STANDARD');
+
+    expect(httpGet).toHaveBeenCalledWith(
+      expect.stringContaining('currency/overview'),
+      expect.objectContaining({ params: expect.objectContaining({ league: 'Standard' }) })
+    );
+  });
+});
+
+describe('NinjaClient — User-Agent header', () => {
+  it('sends the poe-ai User-Agent on every economy/index-state request', async () => {
+    const ctx = makeCtx();
+    const httpGet = mockHttp(ctx, {
+      '/poe1/api/data/index-state': () => INDEX_STATE,
+      '/currency/overview': () => ({ lines: [] }),
+    });
+
+    const client = new NinjaClient(ctx);
+    await client.getItemPrice('X', 'Currency', 'Standard');
+
+    for (const call of httpGet.mock.calls) {
+      expect(call[1]).toEqual(
+        expect.objectContaining({ headers: { 'User-Agent': 'poe-ai/1.0 (github.com/msciotti/poe-ai)' } })
+      );
+    }
+  });
+});
+
 describe('NinjaClient — currency/overview (Currency, Fragment)', () => {
   it('maps chaosEquivalent to chaosValue and derives divineValue from Divine Orb', async () => {
     const ctx = makeCtx();

@@ -1,4 +1,3 @@
-import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { resolveDataDir, RepoeDataNotFoundError } from './paths.js';
@@ -7,10 +6,14 @@ import { resolveDataDir, RepoeDataNotFoundError } from './paths.js';
 export async function readDataFile(filename: string): Promise<string> {
   const dataDir = resolveDataDir();
   const filePath = join(dataDir, filename);
-  if (!existsSync(filePath)) {
-    throw new RepoeDataNotFoundError(dataDir, filename);
+  try {
+    return await readFile(filePath, 'utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new RepoeDataNotFoundError(dataDir, filename);
+    }
+    throw err;
   }
-  return readFile(filePath, 'utf-8');
 }
 
 /** Read and parse a RePoE data file as JSON. Throws RepoeDataNotFoundError if missing. */

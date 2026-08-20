@@ -692,6 +692,52 @@ function api.allocatePassive(params)
   return {success = false, error = "Passive not found: " .. nodeName}
 end
 
+-- Deallocate a passive node by name. Mirrors api.allocatePassive's node lookup and
+-- rebuild sequence, minus the pathfinding-before-alloc step (not relevant here).
+function api.deallocatePassive(params)
+  local nodeName = params.nodeName
+
+  if not build or not build.spec then
+    return {success = false, error = "Build not initialized"}
+  end
+
+  -- Find node by name
+  for nodeId, node in pairs(build.spec.nodes) do
+    if node.name == nodeName then
+      if not node.alloc then
+        return {success = true, message = "Already deallocated: " .. nodeName, alreadyDeallocated = true}
+      end
+
+      -- Deallocate the node, and any other allocated nodes that depend on it (i.e. are
+      -- only connected to the tree through it). DeallocNode() internally calls
+      -- BuildAllDependsAndPaths() (CRITICAL after any allocation change — see CLAUDE.md)
+      -- to keep paths/reachability correct for whatever remains allocated.
+      build.spec:DeallocNode(node)
+
+      -- Mark that modifiers have changed (THIS IS CRITICAL!) — same as allocatePassive.
+      -- This tells PoB that the modifier database needs to be rebuilt.
+      build.modFlag = true
+      build.buildFlag = true
+
+      -- Directly trigger rebuild to ensure stats are recalculated
+      -- Must call BuildModList first, then BuildOutput
+      if build.configTab and build.configTab.BuildModList then
+        build.configTab:BuildModList()
+      end
+      if build.calcsTab and build.calcsTab.BuildOutput then
+        build.calcsTab:BuildOutput()
+      end
+
+      return {
+        success = true,
+        message = "Deallocated: " .. nodeName
+      }
+    end
+  end
+
+  return {success = false, error = "Passive not found: " .. nodeName}
+end
+
 -- Equip an item from raw item text
 function api.equipItem(params)
   local itemText = params.itemText

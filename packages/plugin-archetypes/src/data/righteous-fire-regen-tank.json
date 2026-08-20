@@ -1,0 +1,107 @@
+{
+  "slug": "righteous-fire-regen-tank",
+  "name": "Righteous Fire Regen Tank",
+  "summary": "A self-immolating caster shell built around the Righteous Fire buff, which burns the caster for a percentage of maximum Life and Energy Shield every second as Fire damage while igniting nearby enemies. Because RF's self-damage scales directly with your own defensive pools, Life/ES investment doubles as damage investment — survival comes from out-resisting and out-regenerating that self-damage (fire resistance, flat life regeneration, leech) rather than from mitigating incoming hits.",
+  "identitySignature": {
+    "signals": [
+      {
+        "kind": "mainSkill",
+        "required": true,
+        "weight": 0.5,
+        "namePatterns": ["Righteous Fire"],
+        "description": "Righteous Fire (or Vaal Righteous Fire) socketed and enabled as a persistent buff is the archetype's entire identity — everything else follows from it."
+      },
+      {
+        "kind": "statShape",
+        "required": false,
+        "weight": 0.2,
+        "stat": "Life",
+        "op": "gte",
+        "threshold": 4000,
+        "description": "RF's own self-damage scales with max Life, so RF builds run very large life pools instead of just 'more life is safer' — it's a direct damage stat here, not only a defensive one."
+      },
+      {
+        "kind": "statShape",
+        "required": false,
+        "weight": 0.15,
+        "stat": "FireResist",
+        "op": "gte",
+        "threshold": 75,
+        "description": "Overcapped fire resistance is a near-universal RF trait since it directly reduces the self-damage tick, not just incoming enemy fire."
+      },
+      {
+        "kind": "keystone",
+        "required": false,
+        "weight": 0.1,
+        "keystoneNames": ["Chaos Inoculation"],
+        "description": "A less common ES-based variant swaps the Life scaling for Energy Shield scaling — RF still deals damage off max ES under CI, so this is a recognizable sub-build rather than a different archetype."
+      }
+    ]
+  },
+  "scalingVectors": [
+    {
+      "mechanic": "Maximum Life",
+      "explanation": "RF's self-damage-per-second scales directly off a percentage of your maximum Life (roughly 90%) before mitigation, so building Life isn't just survivability — it's your own damage output against enemies standing in the RF radius."
+    },
+    {
+      "mechanic": "Maximum Energy Shield",
+      "explanation": "RF also scales off maximum Energy Shield (roughly 70%/second), so hybrid Life/ES gear — and the rarer CI/ES-based variant — still contributes directly to clear/boss damage, not just to defense."
+    },
+    {
+      "mechanic": "Increased Burning Damage / Damage over Time multiplier / gem level",
+      "explanation": "Generic 'increased Burning Damage', 'increased Damage over Time', and gem level all multiply RF's tick the same way they would any other DoT skill — these are the actual damage levers once the Life/ES base is set."
+    },
+    {
+      "mechanic": "Fire resistance (own)",
+      "explanation": "Fire resistance mitigates RF's self-damage the same way it mitigates an enemy hit. Pushing past 75% (and overcapping further) is the single biggest 'more damage you can survive' lever this archetype has, since it reduces the tax on your regen budget rather than the DoT itself."
+    }
+  ],
+  "deadStats": [
+    {
+      "stat": "Attack Speed / Cast Speed",
+      "reason": "RF is cast once and left running as a permanent buff — attack and cast speed after activation do nothing for its damage."
+    },
+    {
+      "stat": "Critical Strike Chance / Multiplier",
+      "reason": "Damage over time cannot critically strike by default (only the Perfect Agony keystone converts crit multiplier into a DoT multiplier), so plain crit investment on an RF-only build is dead."
+    },
+    {
+      "stat": "Chance to Bleed / Poison and their supports",
+      "reason": "RF deals only Fire damage over time — bleed/poison chance has no target skill to apply to."
+    }
+  ],
+  "defensiveProfile": {
+    "layers": [
+      "Fire resistance (mitigates own RF tick and most incoming fire)",
+      "Flat and % increased life regeneration (must outpace RF's self-damage after mitigation)",
+      "Life/ES leech or on-hit life gain as a burst buffer",
+      "A high maximum Life pool that doubles as damage scaling"
+    ],
+    "characteristicWeaknesses": [
+      "Elemental ailments and off-fire damage types (cold/lightning/physical hits) aren't covered by the RF-specific mitigation stack and need their own investment.",
+      "Chaos damage bypasses fire resistance entirely and is a common one-shot vector for RF builds that neglect chaos resistance.",
+      "Regen-based sustain can be outpaced by burst self-damage sources (extra fire damage taken debuffs, degen stacking) even when steady-state math looks safe."
+    ]
+  },
+  "failureModes": [
+    {
+      "symptom": "Character slowly dies while standing still with RF active and no enemies nearby",
+      "diagnosis": "Fire resistance is under 75% or regen doesn't cover the post-mitigation RF tick at current max Life/ES.",
+      "fix": "Push fire resistance to/above 75% (overcap further if possible) before adding more Life; check flat regen and % increased regen sources.",
+      "statCheck": { "stat": "FireResist", "op": "lt", "threshold": 75 }
+    },
+    {
+      "symptom": "TotalDPS looks low despite a high character level and full life pool",
+      "diagnosis": "Missing 'increased Burning Damage' or 'increased Damage over Time' scaling — the Life/ES base is there but the multiplier layer is empty.",
+      "fix": "Add supports/tree nodes for Burning Damage and Damage over Time multiplier; Elemental Focus is usually a straight upgrade since RF's own ignite chance is not a relevant damage source."
+    },
+    {
+      "symptom": "Character dies instantly to a single hit despite a large Life pool",
+      "diagnosis": "No hit-mitigation layer (armour/evasion/block) — RF's stat investment is built around DoT self-damage, not incoming hits, and can leave the build with a large but paper-thin Life pool against hits.",
+      "fix": "Add a hit-avoidance or reduction layer — armour, Molten Shell, Basalt Flask, or block — since RF's own stat investment doesn't protect against being hit."
+    }
+  ],
+  "provenance": "hand-curated",
+  "patchValidity": "3.29.x",
+  "lastReviewedPatch": "3.29"
+}

@@ -1006,11 +1006,18 @@ function api.getSocketGroups(params)
     }
 
     for j, gem in ipairs(group.gemList) do
+      -- gem.gemData links back to Gems.lua's static data (set by ProcessSocketGroup),
+      -- which carries the same `tags` table used elsewhere in PoB (aura, physical,
+      -- support, etc). Exposed here so callers (e.g. plugin-archetypes) can tell active
+      -- skills apart from supports and read gem tags without duplicating Gems.lua.
+      local tags = gem.gemData and gem.gemData.tags or {}
       table.insert(groupInfo.gems, {
         name = gem.nameSpec,
         level = gem.level,
         quality = gem.quality,
-        enabled = gem.enabled
+        enabled = gem.enabled,
+        support = tags.support or false,
+        tags = tags
       })
     end
 

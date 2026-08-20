@@ -1,0 +1,106 @@
+{
+  "slug": "phys-dot-bleed",
+  "name": "Physical DoT (Bleed)",
+  "summary": "A physical damage-over-time shell that inflicts Bleeding from big physical hits and scales the resulting bleed tick rather than the hit itself — the hit exists mainly to apply/refresh the ailment. This is the clearest 'dead stats' showcase in the knowledge base: several stats that look essential for a hit-based attack (attack speed, critical strike multiplier) do close to nothing once damage is actually coming from the ongoing bleed instead of the hit.",
+  "identitySignature": {
+    "signals": [
+      {
+        "kind": "mainSkill",
+        "required": true,
+        "weight": 0.35,
+        "namePatterns": ["Lacerate", "Puncture", "Sunder", "Reap", "Corrupting Fever", "Viper Strike", "Blade Flurry"],
+        "gemTags": ["physical"],
+        "description": "Main skill is a physical-damage skill commonly built around applying and scaling Bleeding rather than its own hit damage."
+      },
+      {
+        "kind": "statShape",
+        "required": true,
+        "weight": 0.35,
+        "stat": "BleedDPS",
+        "op": "gte",
+        "threshold": 50,
+        "description": "Nonzero, meaningful Bleed DPS in PoB's calc output confirms the build is actually generating bleed damage, not just using a skill that happens to be capable of it."
+      },
+      {
+        "kind": "ascendancy",
+        "required": false,
+        "weight": 0.15,
+        "ascendancyNames": ["Gladiator"],
+        "description": "Gladiator's bleed-focused ascendancy notables (stacking multiple bleeds per enemy, bleeding on crit) make it the most common home for this archetype, though it isn't strictly required."
+      },
+      {
+        "kind": "statShape",
+        "required": false,
+        "weight": 0.15,
+        "stat": "BleedDPS",
+        "comparedToStat": "TotalDPS",
+        "op": "ratioAtLeast",
+        "threshold": 0.4,
+        "description": "The bulk of total damage coming from the bleed tick rather than the hit itself is what makes attack-speed/hit-scaling stats 'dead' for this archetype."
+      }
+    ]
+  },
+  "scalingVectors": [
+    {
+      "mechanic": "Base physical hit damage that applies/refreshes the bleed",
+      "explanation": "Bleed magnitude derives from the physical hit damage of the hit that inflicted it, so raw physical hit damage (gem level, weapon physical damage, 'increased Physical Damage') still matters — but only as the base the bleed reads from, not as damage dealt directly."
+    },
+    {
+      "mechanic": "Damage over Time multiplier / 'increased Damage with Bleeding'",
+      "explanation": "This is the direct multiplier on the ongoing bleed tick and the main lever once the physical-hit base is established — gem, tree, and gear sources of 'increased Damage over Time' and bleed-specific damage both apply here."
+    },
+    {
+      "mechanic": "Chance to Bleed (Gladiator's guaranteed bleed on crit, bleed-chance supports)",
+      "explanation": "Consistently applying the ailment at all — not just once — is what turns a hit skill into a DoT-carrying skill. This is a consistency/threshold lever, not a scaling one."
+    },
+    {
+      "mechanic": "Target movement",
+      "explanation": "Bleeding deals substantially more damage per second while the bled target is moving rather than standing still — a real damage lever the build can exploit or lose based on enemy behavior, not gear."
+    }
+  ],
+  "deadStats": [
+    {
+      "stat": "Attack Speed",
+      "reason": "Once bleed is applied and refreshing, the ongoing tick doesn't scale with attack speed at all — attack speed only affects how quickly the ailment is re-applied (relevant to uptime, not magnitude), so heavy attack-speed investment mostly doesn't pay off the way it would on a pure hit-based build."
+    },
+    {
+      "stat": "Critical Strike Multiplier",
+      "reason": "Critical Strike Multiplier does not affect Bleeding damage by default — only the Perfect Agony keystone converts it into a Damage-over-Time multiplier for ailments, so plain crit multiplier investment is dead without that keystone."
+    },
+    {
+      "stat": "Elemental Damage / non-physical 'increased damage' mods",
+      "reason": "Bleed is always Physical damage regardless of the hit's damage-type composition (unless explicitly converted) — 'increased Fire/Cold/Lightning damage' rolls do nothing for the bleed tick."
+    }
+  ],
+  "defensiveProfile": {
+    "layers": [
+      "Whatever the base class/ascendancy provides — this archetype's identity is entirely offensive, so defenses are typically bolted on (life, evasion/armour from gear) rather than synergistic with the DoT mechanic",
+      "Ailment avoidance/immunity to avoid being bled back",
+      "Standard hit-avoidance layers (evasion, armour) with no archetype-specific bonus"
+    ],
+    "characteristicWeaknesses": [
+      "No inherent defensive layer comes from the offense mechanic itself, unlike Righteous Fire (regen) or armour stacking (mitigation) — defense is an entirely separate budget line.",
+      "Builds chasing 'always bleed'/crit-bleed setups sometimes under-invest in raw survivability because so much of the build's complexity budget goes into the offense mechanic."
+    ]
+  },
+  "failureModes": [
+    {
+      "symptom": "TotalDPS is high on paper but actual damage against tanky single targets feels weak",
+      "diagnosis": "Bleed DPS may be low relative to Total DPS — the total looks fine because the hit itself is doing real damage, masking that the DoT component (which should be the main damage source for this archetype) isn't scaled.",
+      "fix": "Check BleedDPS specifically, not just TotalDPS; invest in 'increased Damage over Time'/'increased Damage with Bleeding' rather than more hit-damage multipliers if BleedDPS is a small fraction of the total."
+    },
+    {
+      "symptom": "Damage disappears against stationary bosses/turrets",
+      "diagnosis": "Bleed deals significantly more damage against moving targets — a build tuned against moving trash can look much weaker against bosses that stand still.",
+      "fix": "Don't tune damage expectations purely off leveling/clear damage; check boss-context (stationary-target) bleed numbers or accept the single-target drop and shore it up with a secondary damage source."
+    },
+    {
+      "symptom": "Character invests heavily in attack speed / added crit multiplier but DPS barely moves",
+      "diagnosis": "Attack speed and crit multiplier are largely dead stats for this archetype without Perfect Agony — investment is going to the wrong lever.",
+      "fix": "Redirect investment to Damage over Time multiplier, chance-to-bleed consistency, and base physical hit damage instead."
+    }
+  ],
+  "provenance": "hand-curated",
+  "patchValidity": "3.29.x",
+  "lastReviewedPatch": "3.29"
+}

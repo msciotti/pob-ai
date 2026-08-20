@@ -460,7 +460,16 @@ export class LuaJITRuntime implements PobRuntime {
     enabled: boolean;
     slot?: string;
     gemCount: number;
-    gems: Array<{ name: string; level: number; quality: number; enabled: boolean }>;
+    gems: Array<{
+      name: string;
+      level: number;
+      quality: number;
+      enabled: boolean;
+      /** True for support gems (from Gems.lua's `tags.support`). */
+      support?: boolean;
+      /** Gems.lua tag table for this gem, e.g. { aura: true, physical: true }. */
+      tags?: Record<string, boolean>;
+    }>;
   }>> {
     const response = await this.sendCommand('getSocketGroups', {});
     if (!response['success']) {
@@ -472,7 +481,14 @@ export class LuaJITRuntime implements PobRuntime {
       enabled: boolean;
       slot?: string;
       gemCount: number;
-      gems: Array<{ name: string; level: number; quality: number; enabled: boolean }>;
+      gems: Array<{
+        name: string;
+        level: number;
+        quality: number;
+        enabled: boolean;
+        support?: boolean;
+        tags?: Record<string, boolean>;
+      }>;
     }>) || [];
   }
 

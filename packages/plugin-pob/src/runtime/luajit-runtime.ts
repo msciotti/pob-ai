@@ -316,6 +316,24 @@ export class LuaJITRuntime implements PobRuntime {
     }
   }
 
+  /**
+   * Deallocate a passive node by name. Also deallocates any other allocated node that
+   * only connects to the tree through it (PoB's own PassiveSpec:DeallocNode behavior),
+   * and rebuilds paths/dependencies for whatever remains allocated.
+   */
+  async deallocatePassive(nodeName: string): Promise<{ success: boolean; message: string }> {
+    const response = await this.sendCommand('deallocatePassive', { nodeName });
+
+    if (!response['success']) {
+      throw new Error((response['error'] as string | undefined) || 'Failed to deallocate passive');
+    }
+
+    const message = (response['message'] as string | undefined) || `Deallocated ${nodeName}`;
+    console.error(message);
+
+    return { success: true, message };
+  }
+
   async getNodeInfo(nodeName: string): Promise<{
     id: string;
     name: string;

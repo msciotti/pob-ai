@@ -83,7 +83,13 @@ export class LuaJITRuntime implements PobRuntime {
       // Bridge script lives in packages/plugin-pob/scripts/
       const bridgeScript = join(LuaJITRuntime.pluginRoot, 'scripts', 'pob-bridge.lua');
 
-      const absoluteLuajitPath = this.luajitPath.startsWith('/')
+      // A bare command name (e.g. 'luajit', the system-PATH fallback when no
+      // bundled binary was built — see the constructor) has no path
+      // separator at all; joining it with cwd would turn it into a specific
+      // nonexistent file instead of letting spawn()'s PATH lookup resolve
+      // it. Only an actual relative *path* (containing a separator) needs
+      // resolving against cwd.
+      const absoluteLuajitPath = this.luajitPath.startsWith('/') || !this.luajitPath.includes('/')
         ? this.luajitPath
         : join(process.cwd(), this.luajitPath);
       const absoluteDkjsonPath = this.dkjsonPath.startsWith('/')

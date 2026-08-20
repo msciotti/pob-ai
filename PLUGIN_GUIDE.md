@@ -185,6 +185,31 @@ const key = `myplugin:gems:${gemName}`;
 
 Economy data (prices) changes daily; use short TTLs (5–15 minutes). Static game data (passive descriptions, item bases) rarely changes mid-patch; use longer TTLs (1–24 hours).
 
+## Using `@poe-ai/game-data`
+
+For mods, tags, base items, fossils, essences, and crafting bench options, prefer `@poe-ai/game-data` over scraping a wiki or trade site. It's a plain library (not a plugin — core never loads it), so add it as a regular dependency and import loaders directly:
+
+```typescript
+import { getMods, getBaseItems, getGameDataVersion } from '@poe-ai/game-data';
+
+const mods = await getMods();              // Record<string, RePoEMod>, keyed by mod id
+const baseItems = await getBaseItems();     // Record<string, RePoEBaseItem>, keyed by metadata id
+const patchVersion = await getGameDataVersion(); // e.g. "3.29.3.1.4"
+```
+
+Each loader (`getMods`, `getModTypes`, `getTags`, `getFossils`, `getEssences`, `getBaseItems`, `getItemClasses`, `getCraftingBenchOptions`, `getGameDataVersion`) reads its underlying JSON file lazily and memoizes the parsed result for the life of the process — call them as often as you like.
+
+The data comes from [repoe-fork](https://repoe-fork.github.io/), a JSON export of the game's `.dat` files, downloaded locally via:
+
+```bash
+pnpm download-repoe          # skips re-download if already present
+pnpm download-repoe --force  # force a refresh
+```
+
+into a gitignored `repoe-data/` directory at the repo root. If that directory is missing, every loader rejects with a clear error telling the user to run `pnpm download-repoe` — catch it (or let it propagate as a tool error) rather than assuming the data is always there. The directory can be relocated via the `POE_AI_REPOE_DIR` env var (handy for tests — point it at fixture JSON instead of the real multi-MB downloads).
+
+Because this is local file data, there's no HTTP round-trip to cache against — skip `ctx.cache`/TTLs entirely for it. If you still key a cache by something derived from game data (e.g. a computed mod-lookup result), use `getGameDataVersion()` as the patch component instead of `ctx.leagueState.patchVersion`, since the two can drift independently.
+
 ## Publishing
 
 ### Package naming

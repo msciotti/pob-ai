@@ -11,9 +11,15 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "files": [
+    "dist"
+  ],
   "bin": {
     "poe-ai-mcp": "./dist/main-stdio.js",
     "poe-ai": "./dist/cli/main.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=18.0.0"

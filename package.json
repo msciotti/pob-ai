@@ -1,6 +1,7 @@
 {
   "name": "pob-mcp",
   "version": "0.1.0",
+  "private": true,
   "description": "MCP server for Path of Building - enables LLMs to analyze and optimize PoE builds",
   "type": "module",
   "main": "dist/index.js",

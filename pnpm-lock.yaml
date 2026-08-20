@@ -64,6 +64,9 @@ importers:
         specifier: '3'
         version: 3.25.76
     optionalDependencies:
+      '@poe-ai/game-data':
+        specifier: workspace:*
+        version: link:../game-data
       '@poe-ai/plugin-archetypes':
         specifier: workspace:*
         version: link:../plugin-archetypes

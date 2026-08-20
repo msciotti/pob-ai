@@ -15,8 +15,13 @@
   },
   "files": [
     "dist",
-    "scripts"
+    "scripts/download-pob.js",
+    "scripts/download-luajit.js",
+    "scripts/pob-bridge.lua"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

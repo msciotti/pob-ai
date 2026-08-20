@@ -131,6 +131,7 @@ Environment variables:
 |----------|-------------|
 | `POE_WIKI_BASE_URL` | Override plugin-wiki's base URL (default `https://www.poewiki.net`). poewiki.net's Cloudflare protection 403s datacenter IPs — point this at a relay (e.g. a Cloudflare Worker forwarding to poewiki.net) for hosted deployments. |
 | `POE_WIKI_API_URL` | Override the MediaWiki API endpoint (default `https://www.poewiki.net/api.php`). |
+| | Cloud/datacenter hosts get 403s from poewiki.net — deploy the bundled relay (see [deploy/poewiki-relay](deploy/poewiki-relay/README.md)) and point this at it. |
 | `POE_AI_ALL_TREES` | Set to `1` to keep every historical passive-tree version when downloading PoB data (needed for loading builds saved on old patches). |
 | `POE_AI_REPOE_DIR` | Override where `@poe-ai/game-data` looks for downloaded RePoE data. |
 | `POE_SESSION_ID` / `POE_CF_CLEARANCE` | Session cookies for plugin-wealth's stash access (until GGG OAuth registrations reopen). |

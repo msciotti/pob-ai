@@ -18,6 +18,8 @@ export class WikiClient {
   // Cloudflare protection 403s requests from datacenter IP ranges.
   private readonly baseUrl = process.env['POE_WIKI_BASE_URL'] ?? 'https://www.poewiki.net';
   private readonly apiUrl = process.env['POE_WIKI_API_URL'] ?? 'https://www.poewiki.net/api.php';
+  // MediaWiki API etiquette: identify the client and where to reach its maintainers
+  private readonly headers = { 'User-Agent': 'poe-ai/1.0 (+https://github.com/msciotti/pob-ai)' };
 
   constructor(private ctx: PluginContext) {}
 
@@ -27,6 +29,7 @@ export class WikiClient {
     if (cached) return cached;
 
     const data = await this.ctx.http.get<any>(this.apiUrl, {
+      headers: this.headers,
       params: {
         action: 'query',
         list: 'search',
@@ -53,6 +56,7 @@ export class WikiClient {
     if (cached) return cached;
 
     const data = await this.ctx.http.get<any>(this.apiUrl, {
+      headers: this.headers,
       params: {
         action: 'query',
         prop: 'extracts',

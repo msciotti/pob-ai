@@ -9,7 +9,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname } from 'path';
-import { getConfigPath } from '../config/index.js';
+import { DEFAULTS, getConfigPath } from '../config/index.js';
 import type { PoeAiConfig } from '../config/types.js';
 import { RateLimitedHttpClient } from '../http-client.js';
 import {
@@ -30,11 +30,15 @@ export interface InitFlags {
   force: boolean;
   yes: boolean;
   skipDownloads: boolean;
+  retryDownloads: boolean;
   help: boolean;
 }
 
-const DEFAULT_PATCH_VERSION = '3.26.0';
-const FALLBACK_LEAGUE = 'Standard';
+// League/patchVersion fallbacks are the same defaults loadConfig() falls back
+// to for an unconfigured install (config/index.ts's DEFAULTS) -- imported
+// rather than duplicated as literals so the two can't drift on a patch bump.
+const DEFAULT_PATCH_VERSION = DEFAULTS.patchVersion;
+const FALLBACK_LEAGUE = DEFAULTS.league;
 
 export function parseInitArgs(argv: string[]): InitFlags {
   const flags: InitFlags = {
@@ -43,6 +47,7 @@ export function parseInitArgs(argv: string[]): InitFlags {
     force: false,
     yes: false,
     skipDownloads: false,
+    retryDownloads: false,
     help: false,
   };
 
@@ -52,6 +57,7 @@ export function parseInitArgs(argv: string[]): InitFlags {
     else if (arg === '--hardcore') flags.hardcore = true;
     else if (arg === '--ssf') flags.ssf = true;
     else if (arg === '--skip-downloads') flags.skipDownloads = true;
+    else if (arg === '--retry-downloads') flags.retryDownloads = true;
     else if (arg === '--help' || arg === '-h') flags.help = true;
     else if (arg.startsWith('--plugins=')) {
       flags.plugins = arg
@@ -83,6 +89,10 @@ export const INIT_HELP = `Usage: poe-ai init [options]
   --yes, -y               Non-interactive: accept defaults for anything not
                           given as a flag
   --skip-downloads        Write config only, skip running plugin downloads
+  --retry-downloads       Re-run downloads for the EXISTING config's plugins
+                          without touching the config itself (ignores
+                          --plugins/--league/--force/--yes). Use this after
+                          fixing whatever made a download fail.
   --help, -h               Show this help
 `;
 
@@ -150,6 +160,21 @@ export interface RunInitResult {
   downloadResults: DownloadResult[];
 }
 
+/** Logs a summary line per failed download, with actionable next steps. */
+function reportFailedDownloads(downloadResults: DownloadResult[], log: (msg: string) => void): void {
+  const failed = downloadResults.filter((r) => !r.ok);
+  if (failed.length === 0) return;
+
+  log('\n⚠️  Some setup steps did not complete:');
+  for (const r of failed) {
+    log(
+      r.skippedMissingPackage
+        ? `   - ${r.step}: package not installed — install it, then run "poe-ai init --retry-downloads"`
+        : `   - ${r.step}: failed — see output above; run "poe-ai init --retry-downloads" once resolved`
+    );
+  }
+}
+
 function defaultRunDownloads(enabledPlugins: string[]): DownloadResult[] {
   const results: DownloadResult[] = [];
   const needs = new Set(enabledPlugins.flatMap((name) => catalogEntryFor(name)?.downloads ?? []));
@@ -170,6 +195,31 @@ export async function runInit(argv: string[], deps: RunInitDeps): Promise<RunIni
   if (flags.help) {
     log(INIT_HELP);
     return { wrote: false, configPath, downloadResults: [] };
+  }
+
+  // --retry-downloads: re-run downloads for whatever's already configured,
+  // without touching the config. This is the actual recovery path for a
+  // failed download -- a bare `poe-ai init` re-run short-circuits at the
+  // "existing config" check below and never reaches runDownloads() at all.
+  if (flags.retryDownloads) {
+    if (!existsSync(configPath)) {
+      log(`\n❌ No config found at ${configPath} — run "poe-ai init" first.`);
+      return { wrote: false, configPath, downloadResults: [] };
+    }
+
+    let existingConfig: PoeAiConfig;
+    try {
+      existingConfig = JSON.parse(readFileSync(configPath, 'utf8'));
+    } catch (err) {
+      log(`\n❌ Could not parse config at ${configPath}: ${(err as Error).message}`);
+      return { wrote: false, configPath, downloadResults: [] };
+    }
+
+    const configuredPlugins = existingConfig.plugins ?? [];
+    log(`\n🔁 Re-running downloads for the plugins in ${configPath}: ${configuredPlugins.join(', ') || '(none)'}`);
+    const downloadResults = runDownloads(configuredPlugins);
+    reportFailedDownloads(downloadResults, log);
+    return { wrote: false, configPath, config: existingConfig, downloadResults };
   }
 
   // 1. Plugin selection
@@ -251,17 +301,7 @@ export async function runInit(argv: string[], deps: RunInitDeps): Promise<RunIni
   let downloadResults: DownloadResult[] = [];
   if (!flags.skipDownloads) {
     downloadResults = runDownloads(plugins);
-    const failed = downloadResults.filter((r) => !r.ok);
-    if (failed.length > 0) {
-      log('\n⚠️  Some setup steps did not complete:');
-      for (const r of failed) {
-        log(
-          r.skippedMissingPackage
-            ? `   - ${r.step}: package not installed — install it, then re-run poe-ai init`
-            : `   - ${r.step}: failed — see output above`
-        );
-      }
-    }
+    reportFailedDownloads(downloadResults, log);
   }
 
   // 5. Ready-to-paste connection info

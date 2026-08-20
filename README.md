@@ -25,6 +25,12 @@ poe-ai init
 3. Writing `~/.config/poe-ai/config.json` (never overwrites an existing one without `--force` — shows what would change instead).
 4. Downloading exactly what the enabled plugins need — nothing more. Only `@poe-ai/plugin-pob` (pob-data + LuaJIT) and `@poe-ai/plugin-crafting` (RePoE game data) need anything downloaded at all; everything else works from the installed package alone.
 
+If a download fails (network blip, missing package), `poe-ai init` says so and how to fix it. Once fixed, re-run downloads for your existing config without touching it:
+
+```bash
+poe-ai init --retry-downloads
+```
+
 It finishes by printing the connection snippet:
 
 ```jsonc

@@ -30,8 +30,9 @@ describe('parseInitArgs', () => {
     expect(flags.league).toBeUndefined();
   });
 
-  it('recognizes --skip-downloads and --help', () => {
+  it('recognizes --skip-downloads, --retry-downloads, and --help', () => {
     expect(parseInitArgs(['--skip-downloads']).skipDownloads).toBe(true);
+    expect(parseInitArgs(['--retry-downloads']).retryDownloads).toBe(true);
     expect(parseInitArgs(['--help']).help).toBe(true);
     expect(parseInitArgs(['-h']).help).toBe(true);
   });
@@ -206,5 +207,111 @@ describe('runInit', () => {
     expect(result.wrote).toBe(false);
     expect(existsSync(configPath)).toBe(false);
     expect(logs.join('\n')).toContain('Usage: poe-ai init');
+  });
+
+  it('surfaces a failed download in the init output with retry advice, instead of reporting silent success', async () => {
+    const logs: string[] = [];
+    await runInit(['--plugins=pob', '--yes'], {
+      io: noopIO(),
+      isInteractive: false,
+      configPath,
+      log: (msg) => logs.push(msg),
+      runDownloads: () => [{ step: 'pob-data', ok: false }],
+    });
+
+    const output = logs.join('\n');
+    expect(output).toContain('pob-data: failed');
+    expect(output).toContain('poe-ai init --retry-downloads');
+  });
+
+  it('surfaces a missing-package download skip with retry advice', async () => {
+    const logs: string[] = [];
+    await runInit(['--plugins=pob', '--yes'], {
+      io: noopIO(),
+      isInteractive: false,
+      configPath,
+      log: (msg) => logs.push(msg),
+      runDownloads: () => [{ step: 'pob-data + LuaJIT', ok: false, skippedMissingPackage: true }],
+    });
+
+    const output = logs.join('\n');
+    expect(output).toContain('package not installed');
+    expect(output).toContain('poe-ai init --retry-downloads');
+  });
+
+  describe('--retry-downloads', () => {
+    it('re-runs downloads for the existing config plugins without rewriting the config', async () => {
+      const originalContent = JSON.stringify({ league: 'Allflame', plugins: ['@poe-ai/plugin-pob'] });
+      writeFileSync(configPath, originalContent);
+
+      let calledWith: string[] | null = null;
+      const result = await runInit(['--retry-downloads'], {
+        io: noopIO(),
+        isInteractive: false,
+        configPath,
+        log: () => {},
+        runDownloads: (plugins) => {
+          calledWith = plugins;
+          return [{ step: 'pob-data', ok: true }];
+        },
+      });
+
+      expect(calledWith).toEqual(['@poe-ai/plugin-pob']);
+      expect(result.wrote).toBe(false);
+      // The config file itself is untouched — same bytes as before.
+      expect(readFileSync(configPath, 'utf8')).toBe(originalContent);
+    });
+
+    it('reports a clear error and does not call runDownloads when no config exists', async () => {
+      const logs: string[] = [];
+      let called = false;
+      const result = await runInit(['--retry-downloads'], {
+        io: noopIO(),
+        isInteractive: false,
+        configPath,
+        log: (msg) => logs.push(msg),
+        runDownloads: () => {
+          called = true;
+          return [];
+        },
+      });
+
+      expect(called).toBe(false);
+      expect(result.wrote).toBe(false);
+      expect(logs.join('\n')).toContain('No config found');
+    });
+
+    it('surfaces a failed retry download with the same retry advice', async () => {
+      writeFileSync(configPath, JSON.stringify({ league: 'Standard', plugins: ['@poe-ai/plugin-pob'] }));
+
+      const logs: string[] = [];
+      await runInit(['--retry-downloads'], {
+        io: noopIO(),
+        isInteractive: false,
+        configPath,
+        log: (msg) => logs.push(msg),
+        runDownloads: () => [{ step: 'pob-data', ok: false }],
+      });
+
+      expect(logs.join('\n')).toContain('poe-ai init --retry-downloads');
+    });
+
+    it('ignores --plugins/--league/--force when combined with --retry-downloads', async () => {
+      writeFileSync(configPath, JSON.stringify({ league: 'Standard', plugins: ['@poe-ai/plugin-wiki'] }));
+
+      let calledWith: string[] | null = null;
+      await runInit(['--retry-downloads', '--plugins=pob', '--league=Allflame', '--force'], {
+        io: noopIO(),
+        isInteractive: false,
+        configPath,
+        log: () => {},
+        runDownloads: (plugins) => {
+          calledWith = plugins;
+          return [];
+        },
+      });
+
+      expect(calledWith).toEqual(['@poe-ai/plugin-wiki']);
+    });
   });
 });

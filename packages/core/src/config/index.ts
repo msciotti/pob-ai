@@ -5,7 +5,7 @@ import type { PoeAiConfig } from './types.js';
 
 const DEFAULT_CONFIG_PATH = join(homedir(), '.config', 'poe-ai', 'config.json');
 
-const DEFAULTS: PoeAiConfig = {
+export const DEFAULTS: PoeAiConfig = {
   league: 'Standard',
   patchVersion: '3.26.0',
   hardcore: false,

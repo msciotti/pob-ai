@@ -63,6 +63,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # pob-data/LuaJIT are no longer fetched by postinstall (section 1d/2b:
+      # heavy downloads only run for plugins a user actually enables, via
+      # `poe-ai init` or this direct script call) — CI has to ask for them
+      # explicitly. The pob-cache step above still short-circuits this once
+      # `pob-data/.download-complete` + the built luajit binary are cached.
+      - name: Download PoB data (pob-data + LuaJIT)
+        run: pnpm --filter @poe-ai/plugin-pob run setup
+
       - name: Build core
         run: pnpm --filter @poe-ai/core build
 
@@ -139,6 +147,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # See the same step in the MCP Server Tests job above — no longer a
+      # postinstall side effect.
+      - name: Download PoB data (pob-data + LuaJIT)
+        run: pnpm --filter @poe-ai/plugin-pob run setup
 
       - name: Build core
         run: pnpm --filter @poe-ai/core build

@@ -40,6 +40,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
+      # "Run workspace tests" below (`pnpm -r test`) includes @poe-ai/plugin-pob's
+      # own test suite, which needs the same LuaJIT binary + PoB source that
+      # test-pob-runtime relies on — without this cache they were never present
+      # here, so those data-dependent tests would time out or report zero-value
+      # stats. Same cache key/steps as the test-pob-runtime job below.
+      - name: Cache PoB data (LuaJIT binary + PoB source)
+        id: pob-cache
+        uses: actions/cache@v4
+        with:
+          path: packages/plugin-pob/pob-data
+          key: pob-data-${{ runner.os }}-luajit-v2.1-pob-master-${{ hashFiles('packages/plugin-pob/scripts/download-*.js') }}
+          restore-keys: |
+            pob-data-${{ runner.os }}-luajit-v2.1-pob-master-
+
+      - name: Install build tools (for LuaJIT)
+        if: steps.pob-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -128,3 +148,49 @@ jobs:
 
       - name: Run PoB runtime tests
         run: pnpm --filter @poe-ai/plugin-pob test
+
+  mcp-e2e:
+    name: MCP E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      # Real-plugin smoke tests (plugin-wiki over the network, plugin-pob over
+      # LuaJIT) are env-gated (WIKI_INTEGRATION / POB_INTEGRATION) and stay off
+      # here by default — this only runs the hermetic stdio/HTTP e2e suites
+      # against the fixture plugin.
+      - name: Run MCP e2e tests
+        run: pnpm --filter @poe-ai/integration-tests test

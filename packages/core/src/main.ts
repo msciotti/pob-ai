@@ -71,13 +71,25 @@ app.post('/mcp', async (req, res) => {
   }
 });
 
-// Start the HTTP server
+// Start the HTTP server. PORT=0 asks the OS for an ephemeral free port — useful for
+// tests and for running multiple instances side by side; the actually-bound port is
+// read back from the server's address() once listening starts, since it may differ
+// from the requested PORT (0 → OS-assigned).
 const httpServer = app.listen(PORT, () => {
-  console.error(`[poe-ai] Server running on http://localhost:${PORT}/mcp`);
-  console.error(`[poe-ai] Health check: http://localhost:${PORT}/health`);
+  const address = httpServer.address();
+  const boundPort = address && typeof address === 'object' ? address.port : PORT;
+  console.error(`[poe-ai] Server running on http://localhost:${boundPort}/mcp`);
+  console.error(`[poe-ai] Health check: http://localhost:${boundPort}/health`);
   console.error('[poe-ai] Ready to accept connections');
-}).on('error', (error) => {
-  console.error('[poe-ai] Server error:', error);
+}).on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(
+      `[poe-ai] Port ${PORT} is already in use by another process. ` +
+      `Set the PORT environment variable to a free port (or PORT=0 to let the OS pick one) and try again.`,
+    );
+  } else {
+    console.error('[poe-ai] Server error:', error);
+  }
   process.exit(1);
 });
 

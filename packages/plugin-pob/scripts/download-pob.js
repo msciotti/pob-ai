@@ -19,6 +19,12 @@ const POB_DATA_DIR = join(__dirname, '..', 'pob-data');
 const POB_REPO = 'PathOfBuildingCommunity/PathOfBuilding';
 const POB_BRANCH = 'master'; // Could also use a specific release tag
 
+// Same file the runtime detector (runtime/detector.ts) checks to recognize a valid
+// PoB installation — reused here as the "download already completed" marker so a
+// restored actions/cache hit (or a rerun on an already-provisioned machine) skips
+// the network fetch entirely, instead of wiping and re-downloading every install.
+const POB_MARKER = join(POB_DATA_DIR, 'src', 'HeadlessWrapper.lua');
+
 console.log('📦 Downloading Path of Building source...');
 
 /**
@@ -46,10 +52,20 @@ function download(url) {
 }
 
 async function main() {
+  // Already downloaded (e.g. restored from actions/cache, or a prior local install)
+  // — skip re-fetching. Without this check, every `pnpm install` wiped and
+  // re-downloaded PoB from scratch (and, since that wipe also removed the
+  // sibling luajit/ directory this script's sibling script builds into, forced a
+  // full LuaJIT rebuild too), making any pob-data cache a no-op.
+  if (existsSync(POB_MARKER)) {
+    console.log(`✅ Path of Building source already present at ${POB_DATA_DIR} — skipping download`);
+    return;
+  }
+
   try {
-    // Clean up existing data directory
+    // Clean up any partial/stale data directory before a fresh download.
     if (existsSync(POB_DATA_DIR)) {
-      console.log('   Removing existing PoB data...');
+      console.log('   Removing incomplete PoB data...');
       await rm(POB_DATA_DIR, { recursive: true, force: true });
     }
 

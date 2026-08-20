@@ -25,5 +25,5 @@ export { loadPlugins } from './plugin-loader.js';
 export { PoeAiMcpServer } from './server.js';
 
 // Config
-export { loadConfig } from './config/index.js';
+export { loadConfig, getConfigPath } from './config/index.js';
 export type { PoeAiConfig } from './config/types.js';

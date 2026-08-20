@@ -36,6 +36,7 @@ Rules that must never be violated:
 - Cache keys must include `patchVersion` when caching game data (content changes per patch)
 - Tool names are `snake_case`: `load_build`, `get_currency_price`, `wiki_lookup`
 - Plugin packages use `@poe-ai/` scope for first-party, unprefixed `poe-ai-plugin-*` for community
+- **No excessive comments.** Only comment behavior that is non-obvious from reading the code (game-mechanic constraints, protocol quirks, "why" decisions). Never narrate what the next line does, restate the code in prose, or leave notes about the change itself ("added per review", "new in this PR") — those belong in commit messages.
 
 ## What to Focus On in Reviews
 
@@ -49,6 +50,7 @@ Rules that must never be violated:
 
 ### Usually flag
 - HTTP calls in plugins that bypass `ctx.http` (they'd skip rate limiting)
+- Comments that restate the code or narrate the change instead of explaining non-obvious behavior
 - Hardcoded league names or patch versions (should come from `ctx.leagueState`)
 - Missing error handling in `initialize()` (a plugin crash on startup takes down the server)
 

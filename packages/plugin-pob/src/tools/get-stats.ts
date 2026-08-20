@@ -8,7 +8,11 @@ type Input = z.infer<typeof inputSchema>;
 
 export const getStatsTool: PluginTool<Input> = {
   name: 'get_build_stats',
-  description: 'Get all calculated stats for the currently loaded Path of Building build',
+  description:
+    'Get every calculated stat for the currently loaded build as a flat dump (hundreds of ' +
+    'entries, including alias pairs like TotalDPS/CombinedDPS that report near-identical ' +
+    'values for most builds). For a quick, curated read on a build, call get_build_summary ' +
+    'first -- reach for this tool only when you need a specific stat that summary omits.',
   inputSchema,
 
   async handler(_input: Input, ctx: PluginContext) {

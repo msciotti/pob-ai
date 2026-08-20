@@ -14,7 +14,10 @@ import type { RePoEMod, RePoEItemClasses } from '@poe-ai/game-data';
 //
 // These shapes are preserved from the poedb-scraping implementation (PR #55)
 // so tool output stays stable for existing consumers -- only the data source
-// underneath changed.
+// underneath changed. Exception: ModResult.level was renamed to
+// requiredLevel (issue #64) -- it's an item-level requirement, and the bare
+// "level" name was ambiguous against mod/gem level. This is a client-visible
+// field rename.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface SpawnWeightMultiplier {
@@ -52,7 +55,7 @@ export interface ModResult {
   /** Mod suffix/prefix name, e.g. "of Bameth" */
   name: string;
   /** Required item level */
-  level: number;
+  requiredLevel: number;
   /** Spawn weight on this item class */
   weight: number;
   /** Mod family/group, e.g. "ChaosResistance" */
@@ -189,7 +192,7 @@ function resolveSpawnWeight(mod: RePoEMod, tags: Set<string>): number | undefine
 function toModResult(mod: RePoEMod, weight: number): ModResult {
   return {
     name: mod.name,
-    level: mod.required_level,
+    requiredLevel: mod.required_level,
     weight,
     family: mod.groups[0] ?? '',
     text: mod.text,

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PluginTool, PluginContext } from '@poe-ai/core';
-import { KEY_BUILD_STATS } from './constants.js';
+import { computeStatChanges } from './stat-diff.js';
 
 const inputSchema = z.object({
   nodeName: z.string().min(1, 'Node name must not be empty'),
@@ -52,15 +52,10 @@ export const allocatePassiveTool: PluginTool<Input> = {
         ctx.logger.warn('[allocate_passive] Warning: Could not get stats after allocation');
       }
 
-      // Calculate deltas for key stats
-      const statChanges: Record<string, { before: number; after: number; delta: number }> = {};
-      for (const key of KEY_BUILD_STATS) {
-        const before = statsBefore[key];
-        const after = statsAfter[key];
-        if (typeof before === 'number' && typeof after === 'number') {
-          statChanges[key] = { before, after, delta: after - before };
-        }
-      }
+      // Every stat that actually changed, not a fixed subset -- e.g. Resolute
+      // Technique zeroing CritChance needs to show up even though CritChance
+      // isn't in any curated "key stats" list.
+      const statChanges = computeStatChanges(statsBefore, statsAfter);
 
       const output = {
         success: true,

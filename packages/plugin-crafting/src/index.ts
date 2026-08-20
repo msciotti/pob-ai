@@ -12,9 +12,10 @@ const CraftingPlugin: PoEPlugin = {
 
   async initialize(ctx) {
     ctx.logger.info(
-      '[@poe-ai/plugin-crafting] Initialized — poedb.tw crafting knowledge ready'
+      '[@poe-ai/plugin-crafting] Initialized — crafting knowledge ready (local RePoE game data)'
     );
-    // No heavy init needed — crafting client is stateless, uses ctx.http + ctx.cache
+    // No heavy init needed — crafting client is stateless, reads local game data via
+    // @poe-ai/game-data and caches derived lookups in ctx.cache.
   },
 
   tools: [

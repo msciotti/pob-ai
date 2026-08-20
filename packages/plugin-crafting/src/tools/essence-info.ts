@@ -11,7 +11,7 @@ type Input = z.infer<typeof inputSchema>;
 export const essenceInfoTool: PluginTool<Input> = {
   name: 'crafting_essence_info',
   description:
-    'Look up crafting information about a Path of Exile essence from poedb.tw. ' +
+    'Look up crafting information about a Path of Exile essence from local game data. ' +
     'Returns the guaranteed mods the essence applies per item class.',
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputSchema: inputSchema as any,

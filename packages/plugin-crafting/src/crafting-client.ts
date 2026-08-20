@@ -1,12 +1,20 @@
 import type { PluginContext } from '@poe-ai/core';
-
-/** TTL: 6 hours in milliseconds */
-const CRAFTING_TTL_MS = 6 * 60 * 60 * 1000;
-
-const BASE_URL = 'https://poedb.tw/us';
+import {
+  getMods,
+  getFossils,
+  getEssences,
+  getBaseItems,
+  getItemClasses,
+  getGameDataVersion,
+} from '@poe-ai/game-data';
+import type { RePoEMod, RePoEItemClasses } from '@poe-ai/game-data';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Return types
+//
+// These shapes are preserved from the poedb-scraping implementation (PR #55)
+// so tool output stays stable for existing consumers -- only the data source
+// underneath changed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface SpawnWeightMultiplier {
@@ -27,7 +35,7 @@ export interface FossilResult {
 
 export interface EssenceMod {
   generation: 'Prefix' | 'Suffix';
-  /** Mod text with HTML stripped and values normalised, e.g. "+(46 — 48)% to Cold Resistance" */
+  /** Mod text with values normalised, e.g. "+(46-48)% to Cold Resistance" */
   text: string;
   /** Tags on this mod, e.g. ["elemental","cold","resistance"] */
   tags: string[];
@@ -35,24 +43,9 @@ export interface EssenceMod {
 
 export interface EssenceResult {
   name: string;
-  /** All guaranteed mods this essence can apply (across all item types) */
+  /** All guaranteed mods this essence can apply (across all item types), deduplicated */
   mods: EssenceMod[];
   error?: string;
-}
-
-/** A raw mod entry as embedded by poedb in item-class HTML pages */
-interface PoedbModEntry {
-  Name: string;
-  Level: string;
-  ModGenerationTypeID: string;
-  ModFamilyList: string[];
-  DropChance: number;
-  /** HTML string with mod text */
-  str: string;
-  /** Tags this mod has (used by fossils/harvest) */
-  fossil_no: string[];
-  /** Item class tags this mod can appear on */
-  spawn_no: string[];
 }
 
 export interface ModResult {
@@ -62,586 +55,385 @@ export interface ModResult {
   level: number;
   /** Spawn weight on this item class */
   weight: number;
-  /** Mod family, e.g. "ChaosResistance" */
+  /** Mod family/group, e.g. "ChaosResistance" */
   family: string;
-  /** Clean mod text, e.g. "+(31 — 35)% to Chaos Resistance" */
+  /** Mod text, e.g. "+(31-35)% to Chaos Resistance" */
   text: string;
   /** Tags this mod has, e.g. ["chaos","resistance"] */
   tags: string[];
-  /** Generation type: "normal" | "synthesis" | "corrupted" | other */
+  /** Generation type, e.g. "prefix" | "suffix" | "corrupted" | other RePoE generation_type */
   generationType: string;
 }
 
-export interface HarvestCraft {
-  name: string;
-  description: string;
-  /** Harvest colour that produces this craft: yellow, blue, purple, red */
-  colour: 'yellow' | 'blue' | 'purple' | 'red';
-  /** Tag associated with the craft operation, e.g. "life", "caster" */
-  tag: string;
-  /** Broad applicability — not always 1-to-1 with PoE item classes */
-  applicableTo: string[];
-  operation: 'reforge' | 'augment' | 'remove-add' | 'remove' | 'other';
+// ─────────────────────────────────────────────────────────────────────────────
+// Item class resolution
+//
+// User-facing item class strings (e.g. "ring", "body armour") are resolved to
+// an item_classes.min.json key. Common shorthand is aliased explicitly since
+// RePoE's own keys are a mix of singular/plural and multi-word forms (e.g.
+// "Ring", "Body Armour", "One Hand Sword").
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ITEM_CLASS_ALIASES: Record<string, string> = {
+  ring: 'Ring',
+  rings: 'Ring',
+  amulet: 'Amulet',
+  amulets: 'Amulet',
+  belt: 'Belt',
+  belts: 'Belt',
+  helmet: 'Helmet',
+  helmets: 'Helmet',
+  helm: 'Helmet',
+  helms: 'Helmet',
+  gloves: 'Gloves',
+  glove: 'Gloves',
+  boots: 'Boots',
+  boot: 'Boots',
+  'body armour': 'Body Armour',
+  'body armor': 'Body Armour',
+  'body armours': 'Body Armour',
+  chest: 'Body Armour',
+  quiver: 'Quiver',
+  quivers: 'Quiver',
+  shield: 'Shield',
+  shields: 'Shield',
+  jewel: 'Jewel',
+  jewels: 'Jewel',
+  sword: 'One Hand Sword',
+  'one hand sword': 'One Hand Sword',
+  '2h sword': 'Two Hand Sword',
+  'two hand sword': 'Two Hand Sword',
+  axe: 'One Hand Axe',
+  'one hand axe': 'One Hand Axe',
+  '2h axe': 'Two Hand Axe',
+  'two hand axe': 'Two Hand Axe',
+  mace: 'One Hand Mace',
+  'one hand mace': 'One Hand Mace',
+  '2h mace': 'Two Hand Mace',
+  'two hand mace': 'Two Hand Mace',
+  bow: 'Bow',
+  bows: 'Bow',
+  staff: 'Staff',
+  staves: 'Staff',
+  staffs: 'Staff',
+  warstaff: 'Warstaff',
+  claw: 'Claw',
+  claws: 'Claw',
+  dagger: 'Dagger',
+  daggers: 'Dagger',
+  'rune dagger': 'Rune Dagger',
+  wand: 'Wand',
+  wands: 'Wand',
+  sceptre: 'Sceptre',
+  sceptres: 'Sceptre',
+  scepter: 'Sceptre',
+};
+
+/** Resolve a user-facing item class string to its item_classes.min.json key. */
+function resolveItemClassKey(itemClasses: RePoEItemClasses, input?: string): string | undefined {
+  if (!input) return undefined;
+  if (itemClasses[input]) return input;
+
+  const norm = input.trim().toLowerCase();
+  for (const key of Object.keys(itemClasses)) {
+    if (key.toLowerCase() === norm) return key;
+    if (itemClasses[key].name.toLowerCase() === norm) return key;
+  }
+  return ITEM_CLASS_ALIASES[norm];
+}
+
+/**
+ * Resolve the set of item tags shared by every base item of a given class --
+ * the tag set the game checks a mod's `spawn_weights` against for that class.
+ *
+ * We take the intersection (not union) of tags across all bases of the class:
+ * attribute tags (str_armour/dex_armour/etc.) vary per base within a class, so
+ * intersecting strips those out and leaves only the tags every base shares
+ * (e.g. "ring", "default", or "body_armour"/"armour"/"default"). Verified
+ * against the real 3.29.3.1.4 export -- see PR description.
+ */
+async function getItemClassTags(ctx: PluginContext, classKey: string): Promise<Set<string>> {
+  const version = await getGameDataVersion();
+  const cacheKey = `crafting:classtags:${version}:${classKey}`;
+  const cached = ctx.cache.get<string[]>(cacheKey);
+  if (cached) return new Set(cached);
+
+  const baseItems = await getBaseItems();
+  let intersection: Set<string> | undefined;
+  for (const item of Object.values(baseItems)) {
+    if (item.item_class !== classKey) continue;
+    const itemTags = new Set(item.tags);
+    intersection = intersection
+      ? new Set([...intersection].filter((t) => itemTags.has(t)))
+      : itemTags;
+  }
+  const tags = intersection ? [...intersection] : [];
+  ctx.cache.set(cacheKey, tags);
+  return new Set(tags);
+}
+
+/**
+ * Resolve a mod's spawn weight for a given item tag set by replicating the
+ * game's rule: walk `spawn_weights` in order and return the first entry whose
+ * tag the item has. Returns undefined if nothing matches (mod cannot spawn on
+ * this item at all -- shouldn't normally happen since almost every item tag
+ * set includes "default").
+ */
+function resolveSpawnWeight(mod: RePoEMod, tags: Set<string>): number | undefined {
+  for (const sw of mod.spawn_weights) {
+    if (tags.has(sw.tag)) return sw.weight;
+  }
+  return undefined;
+}
+
+function toModResult(mod: RePoEMod, weight: number): ModResult {
+  return {
+    name: mod.name,
+    level: mod.required_level,
+    weight,
+    family: mod.groups[0] ?? '',
+    text: mod.text,
+    tags: mod.implicit_tags,
+    generationType: mod.generation_type,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Static harvest craft data
-// Harvest crafts are a finite, patch-stable list; we keep them as static data
-// rather than scraping poedb (which doesn't have a clean harvest endpoint).
+// Influence resolution
+//
+// The six "conqueror-style" influences (Shaper, Elder, and the four map
+// conquerors) are encoded in RePoE as a per-item-class `influence_tags` array
+// on item_classes.min.json, using internal codenames for three of them --
+// verified against the real 3.29.3.1.4 export:
+//   Hunter -> "basilisk", Warlord -> "adjudicator", Redeemer -> "eyrie"
+// (Shaper/Elder/Crusader keep their plain names as codenames.)
+//
+// Synthesis and Eldritch mods aren't per-item-class influence tags -- they're
+// identified by `generation_type` instead. NOTE: this RePoE export has no
+// domain="item" mods under a synthesis-flavoured generation_type (the
+// synthesis_a/synthesis_globals/synthesis_bonus types that do exist are all
+// map-mod domains, not gear-implicit mods) -- see PR description. "synthesis"
+// is kept here for forward-compatibility but currently returns no results.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const HARVEST_CRAFTS: HarvestCraft[] = [
-  // ── Reforge keeping prefix/suffix ──────────────────────────────────────────
-  {
-    name: 'Reforge keeping prefixes',
-    description: 'Reforge a magic or rare item with new random modifiers, keeping all prefixes.',
-    colour: 'yellow',
-    tag: 'reforge',
-    applicableTo: ['any'],
-    operation: 'reforge',
-  },
-  {
-    name: 'Reforge keeping suffixes',
-    description: 'Reforge a magic or rare item with new random modifiers, keeping all suffixes.',
-    colour: 'yellow',
-    tag: 'reforge',
-    applicableTo: ['any'],
-    operation: 'reforge',
-  },
-  // ── Augment ─────────────────────────────────────────────────────────────────
-  {
-    name: 'Augment a life modifier',
-    description: 'Add a new life modifier to a magic or rare item that has no life modifier.',
-    colour: 'yellow',
-    tag: 'life',
-    applicableTo: ['any'],
-    operation: 'augment',
-  },
-  {
-    name: 'Augment a caster modifier',
-    description: 'Add a new caster modifier to a magic or rare item that has no caster modifier.',
-    colour: 'blue',
-    tag: 'caster',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'augment',
-  },
-  {
-    name: 'Augment an attack modifier',
-    description: 'Add a new attack modifier to a magic or rare item that has no attack modifier.',
-    colour: 'yellow',
-    tag: 'attack',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'augment',
-  },
-  {
-    name: 'Augment a defence modifier',
-    description: 'Add a new defence modifier to a magic or rare item that has no defence modifier.',
-    colour: 'purple',
-    tag: 'defence',
-    applicableTo: ['armour'],
-    operation: 'augment',
-  },
-  {
-    name: 'Augment a physical modifier',
-    description: 'Add a new physical modifier to a magic or rare item that has no physical modifier.',
-    colour: 'yellow',
-    tag: 'physical',
-    applicableTo: ['weapon', 'armour'],
-    operation: 'augment',
-  },
-  {
-    name: 'Augment a fire modifier',
-    description: 'Add a new fire modifier to a magic or rare item that has no fire modifier.',
-    colour: 'red',
-    tag: 'fire',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'augment',
-  },
-  {
-    name: 'Augment a cold modifier',
-    description: 'Add a new cold modifier to a magic or rare item that has no cold modifier.',
-    colour: 'blue',
-    tag: 'cold',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'augment',
-  },
-  {
-    name: 'Augment a lightning modifier',
-    description: 'Add a new lightning modifier to a magic or rare item that has no lightning modifier.',
-    colour: 'yellow',
-    tag: 'lightning',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'augment',
-  },
-  {
-    name: 'Augment a chaos modifier',
-    description: 'Add a new chaos modifier to a magic or rare item that has no chaos modifier.',
-    colour: 'purple',
-    tag: 'chaos',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'augment',
-  },
-  {
-    name: 'Augment a speed modifier',
-    description: 'Add a new speed modifier to a magic or rare item that has no speed modifier.',
-    colour: 'yellow',
-    tag: 'speed',
-    applicableTo: ['boots', 'gloves', 'belt'],
-    operation: 'augment',
-  },
-  // ── Remove-Add (non-destructive reroll of one tag) ─────────────────────────
-  {
-    name: 'Remove a life modifier, then add a new caster modifier',
-    description: 'Remove a life modifier from a rare item, then add a new caster modifier.',
-    colour: 'blue',
-    tag: 'caster',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'remove-add',
-  },
-  {
-    name: 'Remove a caster modifier, then add a new life modifier',
-    description: 'Remove a caster modifier from a rare item, then add a new life modifier.',
-    colour: 'yellow',
-    tag: 'life',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'remove-add',
-  },
-  {
-    name: 'Remove an attack modifier, then add a new caster modifier',
-    description: 'Remove an attack modifier from a rare item, then add a new caster modifier.',
-    colour: 'blue',
-    tag: 'caster',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'remove-add',
-  },
-  {
-    name: 'Remove a caster modifier, then add a new attack modifier',
-    description: 'Remove a caster modifier from a rare item, then add a new attack modifier.',
-    colour: 'yellow',
-    tag: 'attack',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'remove-add',
-  },
-  {
-    name: 'Remove a physical modifier, then add a new fire modifier',
-    description: 'Remove a physical modifier from a rare item, then add a new fire modifier.',
-    colour: 'red',
-    tag: 'fire',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'remove-add',
-  },
-  {
-    name: 'Remove a fire modifier, then add a new cold modifier',
-    description: 'Remove a fire modifier from a rare item, then add a new cold modifier.',
-    colour: 'blue',
-    tag: 'cold',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'remove-add',
-  },
-  {
-    name: 'Remove a cold modifier, then add a new lightning modifier',
-    description: 'Remove a cold modifier from a rare item, then add a new lightning modifier.',
-    colour: 'yellow',
-    tag: 'lightning',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'remove-add',
-  },
-  {
-    name: 'Remove a lightning modifier, then add a new chaos modifier',
-    description: 'Remove a lightning modifier from a rare item, then add a new chaos modifier.',
-    colour: 'purple',
-    tag: 'chaos',
-    applicableTo: ['weapon', 'armour', 'accessory'],
-    operation: 'remove-add',
-  },
-  {
-    name: 'Remove a defence modifier, then add a new life modifier',
-    description: 'Remove a defence modifier from a rare item, then add a new life modifier.',
-    colour: 'yellow',
-    tag: 'life',
-    applicableTo: ['armour'],
-    operation: 'remove-add',
-  },
-  {
-    name: 'Remove a life modifier, then add a new defence modifier',
-    description: 'Remove a life modifier from a rare item, then add a new defence modifier.',
-    colour: 'purple',
-    tag: 'defence',
-    applicableTo: ['armour'],
-    operation: 'remove-add',
-  },
-];
+const INFLUENCE_CODENAMES: Record<string, string> = {
+  shaper: 'shaper',
+  elder: 'elder',
+  crusader: 'crusader',
+  hunter: 'basilisk',
+  warlord: 'adjudicator',
+  redeemer: 'eyrie',
+};
+
+const GENERATION_TYPE_INFLUENCES: Record<string, string[]> = {
+  eldritch: ['searing_exarch_implicit', 'eater_of_worlds_implicit'],
+  corrupted: ['corrupted'],
+  scourge: ['scourge_benefit', 'scourge_detriment', 'scourge_gimmick'],
+  synthesis: ['synthesis_a', 'synthesis_globals', 'synthesis_bonus'],
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CraftingClient
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Map poedb ModGenerationTypeID → human-readable label
-const GEN_TYPE: Record<string, string> = {
-  '1': 'unique',
-  '2': 'normal',
-  '3': 'synthesis',
-  '4': 'enchantment',
-  '5': 'corrupted',
-  '7': 'bestiary',
-  '8': 'synthesis-implicit',
-  '10': 'blight',
-  '20': 'expedition',
-  '24': 'scourge-upside',
-  '25': 'scourge-downside',
-};
-
-// poedb item class page slug → PoE item class name (add more as needed)
-const ITEM_CLASS_SLUGS: Record<string, string> = {
-  ring: 'Rings',
-  rings: 'Rings',
-  amulet: 'Amulets',
-  amulets: 'Amulets',
-  belt: 'Belts',
-  belts: 'Belts',
-  helmet: 'Helmets',
-  helmets: 'Helmets',
-  gloves: 'Gloves',
-  boots: 'Boots',
-  'body armour': 'BodyArmours',
-  'body armor': 'BodyArmours',
-  'body armours': 'BodyArmours',
-  quiver: 'Quivers',
-  quivers: 'Quivers',
-  shield: 'Shields',
-  shields: 'Shields',
-};
-
 export class CraftingClient {
   constructor(private readonly ctx: PluginContext) {}
 
-  // ── HTML fetching ──────────────────────────────────────────────────────────
-
-  private async fetchHtml(slug: string): Promise<string> {
-    const url = `${BASE_URL}/${slug}`;
-    // ctx.http.get returns parsed JSON by default; for HTML we need the raw string.
-    // poedb returns text/html, so the http client will return it as a string.
-    const raw = await this.ctx.http.get<string>(url, { timeoutMs: 15_000 });
-    if (typeof raw !== 'string') {
-      throw new Error(`Expected HTML string from ${url}, got ${typeof raw}`);
-    }
-    return raw;
-  }
-
-  // ── HTML parsing helpers ───────────────────────────────────────────────────
-
-  /** Strip all HTML tags from a string */
-  private stripHtml(html: string): string {
-    return html
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/\u2014/g, '—')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  /**
-   * Parse the spawn weight multiplier table poedb embeds on fossil pages.
-   *
-   * The HTML looks like:
-   *   <li><span class='badge bg-primary'>Elemental</span> x600%
-   *   <li><span class='badge bg-primary'><i>bleed</i></span> x0%
-   *
-   * Multiple badge spans before the "x NNN%" indicate combined tag requirements
-   * (i.e. the mod must have ALL of those tags).
-   *
-   * poedb moved the badge/multiplier list from the spawn-weight-multipliers
-   * markdown section into a <th>tags</th> table. We try that location first
-   * and fall back to the old section anchor for compatibility.
-   */
-  private parseSpawnWeightMultipliers(html: string): SpawnWeightMultiplier[] {
-    const results: SpawnWeightMultiplier[] = [];
-
-    // New location: <th>tags</th> table containing the badge list
-    const tagsThIdx = html.indexOf('<th>tags</th>');
-    const sectionIdx = tagsThIdx !== -1 ? tagsThIdx : html.indexOf('spawn-weight-multipliers');
-    if (sectionIdx === -1) return results;
-    const section = html.slice(sectionIdx, sectionIdx + 4000);
-
-    // Each <li> encodes one multiplier rule
-    const liMatches = section.matchAll(/<li>(.*?)(?=<li>|<\/ul>|<\/tbody>)/gs);
-    for (const [, liHtml] of liMatches) {
-      // Extract tag names from badge spans
-      const badgeTags: string[] = [];
-      for (const [, badgeInner] of liHtml.matchAll(/<span[^>]*badge[^>]*>(.*?)<\/span>/gs)) {
-        const tag = this.stripHtml(badgeInner).toLowerCase().trim();
-        if (tag) badgeTags.push(tag);
-      }
-      // Extract the multiplier: "x600%" → 6 or "x0%" → 0
-      const multMatch = liHtml.match(/x(\d+)%/);
-      if (badgeTags.length > 0 && multMatch) {
-        results.push({
-          tags: badgeTags,
-          multiplier: parseInt(multMatch[1], 10) / 100,
-        });
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * Parse the plain-text description of a fossil's effects from the
-   * spawn-weight-multipliers paragraph on poedb.
-   */
-  private parseFossilDescription(html: string): string {
-    const sectionIdx = html.indexOf('spawn-weight-multipliers');
-    if (sectionIdx === -1) return '';
-    const section = html.slice(sectionIdx, sectionIdx + 2000);
-    // The description is in a <p> tag immediately following the heading
-    const pMatch = section.match(/<p[^>]*>([\s\S]*?)<\/p>/);
-    if (!pMatch) {
-      // Fall back to stripping everything up to the next section anchor
-      const textSection = section.slice(0, 800);
-      return this.stripHtml(textSection).replace(/^[^A-Z]*/, '').trim();
-    }
-    return this.stripHtml(pMatch[1]);
-  }
-
-  /**
-   * Parse the embedded poedb mod JSON array from an item-class HTML page.
-   *
-   * poedb inlines a JS array literal like: [{"Name":"of the Brute",...},...]
-   * This is the authoritative source for spawn weights and mod tags.
-   */
-  private parseModArray(html: string): PoedbModEntry[] {
-    const idx = html.indexOf('[{"Name":');
-    if (idx === -1) return [];
-
-    // Walk forward to find the matching closing bracket
-    let depth = 0;
-    let end = idx;
-    for (let i = idx; i < html.length; i++) {
-      if (html[i] === '[') depth++;
-      else if (html[i] === ']') {
-        depth--;
-        if (depth === 0) { end = i + 1; break; }
-      }
-    }
-
-    try {
-      return JSON.parse(html.slice(idx, end)) as PoedbModEntry[];
-    } catch {
-      return [];
-    }
-  }
-
-  /**
-   * Parse the essence mod table from a poedb essence page.
-   *
-   * The table has thead `Generation | Description` and one tbody row per mod.
-   * poedb doesn't explicitly label which item class gets which mod row,
-   * so we return all rows with clean text.
-   */
-  private parseEssenceMods(html: string): EssenceMod[] {
-    const results: EssenceMod[] = [];
-
-    // Find the Essence Modifiers section
-    const sectionIdx = html.indexOf('Essence Modifiers');
-    if (sectionIdx === -1) return results;
-    const section = html.slice(sectionIdx, sectionIdx + 8000);
-
-    // Find the first table (Generation/Description)
-    const tableMatch = section.match(/<table[^>]*>([\s\S]*?)<\/table>/);
-    if (!tableMatch) return results;
-
-    const tableHtml = tableMatch[1];
-    const rowMatches = tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g);
-
-    for (const [, rowHtml] of rowMatches) {
-      // Each row has two <td>: Generation and Description
-      const cells = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)];
-      if (cells.length < 2) continue;
-
-      const generation = this.stripHtml(cells[0][1]).trim() as 'Prefix' | 'Suffix';
-      if (generation !== 'Prefix' && generation !== 'Suffix') continue;
-
-      const descHtml = cells[1][1];
-
-      // Extract tags from badge data-tag attributes
-      const tags: string[] = [];
-      for (const [, tagVal] of descHtml.matchAll(/data-tag="([^"]+)"/g)) {
-        tags.push(tagVal.toLowerCase());
-      }
-
-      // Strip HTML for clean text — remove the float-end badge span first
-      const cleanDesc = descHtml.replace(/<span class='float-end'>[\s\S]*?<\/span>/, '');
-      const text = this.stripHtml(cleanDesc);
-
-      if (text) {
-        results.push({ generation, text, tags });
-      }
-    }
-
-    return results;
-  }
-
-  // ── Public methods ─────────────────────────────────────────────────────────
-
   async getFossil(name: string): Promise<FossilResult> {
-    const cacheKey = `crafting:fossil:${this.ctx.leagueState.patchVersion}:${name.toLowerCase()}`;
-    const cached = this.ctx.cache.get<FossilResult>(cacheKey);
-    if (cached) return cached;
-
     try {
-      const slug = name.replace(/\s+/g, '_');
-      const html = await this.fetchHtml(slug);
+      const fossils = await getFossils();
+      const target = name.trim().toLowerCase();
+      const entry = Object.values(fossils).find((f) => f.name.toLowerCase() === target);
 
-      const spawnWeightMultipliers = this.parseSpawnWeightMultipliers(html);
-      const description = this.parseFossilDescription(html);
+      if (!entry) {
+        return {
+          name,
+          spawnWeightMultipliers: [],
+          description: '',
+          error: `Fossil "${name}" not found in local game data`,
+        };
+      }
 
-      const result: FossilResult = { name, spawnWeightMultipliers, description };
-      this.ctx.cache.set(cacheKey, result, CRAFTING_TTL_MS);
-      return result;
+      const spawnWeightMultipliers: SpawnWeightMultiplier[] = [
+        ...entry.positive_mod_weights.map((w) => ({ tags: [w.tag], multiplier: w.weight / 100 })),
+        ...entry.negative_mod_weights.map((w) => ({ tags: [w.tag], multiplier: w.weight / 100 })),
+      ];
+      const description = [
+        ...Object.values(entry.descriptions),
+        ...Object.values(entry.blocked_descriptions),
+      ].join('; ');
+
+      return { name: entry.name, spawnWeightMultipliers, description };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return { name, spawnWeightMultipliers: [], description: '', error: `Failed to fetch fossil "${name}": ${msg}` };
+      return {
+        name,
+        spawnWeightMultipliers: [],
+        description: '',
+        error: `Failed to load fossil "${name}": ${msg}`,
+      };
     }
   }
 
   async getEssence(name: string): Promise<EssenceResult> {
-    const cacheKey = `crafting:essence:${this.ctx.leagueState.patchVersion}:${name.toLowerCase()}`;
-    const cached = this.ctx.cache.get<EssenceResult>(cacheKey);
-    if (cached) return cached;
-
     try {
-      const slug = name.replace(/\s+/g, '_');
-      const html = await this.fetchHtml(slug);
+      const essences = await getEssences();
+      const target = name.trim().toLowerCase();
+      const entry = Object.values(essences).find((e) => e.name.toLowerCase() === target);
 
-      const mods = this.parseEssenceMods(html);
-      const result: EssenceResult = { name, mods };
-      this.ctx.cache.set(cacheKey, result, CRAFTING_TTL_MS);
-      return result;
+      if (!entry) {
+        return { name, mods: [], error: `Essence "${name}" not found in local game data` };
+      }
+
+      const modsData = await getMods();
+      const seen = new Set<string>();
+      const mods: EssenceMod[] = [];
+
+      for (const modId of Object.values(entry.mods)) {
+        if (seen.has(modId)) continue;
+        seen.add(modId);
+
+        const mod = modsData[modId];
+        if (!mod) continue;
+
+        const generation =
+          mod.generation_type === 'prefix' ? 'Prefix' : mod.generation_type === 'suffix' ? 'Suffix' : undefined;
+        if (!generation || !mod.text) continue;
+
+        mods.push({ generation, text: mod.text, tags: mod.implicit_tags });
+      }
+
+      return { name: entry.name, mods };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return { name, mods: [], error: `Failed to fetch essence "${name}": ${msg}` };
+      return { name, mods: [], error: `Failed to load essence "${name}": ${msg}` };
     }
   }
 
   /**
    * Search mods on a given item class.
    *
-   * poedb embeds a JSON array of all mods for an item class in the HTML of the
-   * item class page (e.g. poedb.tw/us/Rings). We fetch that page, parse the
-   * array, then filter by query text, influence tag, and generation type.
-   *
-   * @param query     Substring match against mod text, e.g. "cold resistance"
-   * @param itemClass Normalised item class, e.g. "ring" or "body armour"
-   * @param influence Optional influence tag: shaper|elder|crusader|hunter|warlord|redeemer|synthesis|eldritch
+   * @param query     Substring match against mod text, name, or family, e.g. "cold damage"
+   * @param itemClass Item class, e.g. "ring" or "body armour"
+   * @param influence Optional influence filter: shaper|elder|crusader|hunter|warlord|redeemer|synthesis|eldritch|corrupted|scourge
    */
   async searchMods(query: string, itemClass?: string, influence?: string): Promise<ModResult[]> {
-    const normalised = (itemClass ?? 'ring').toLowerCase().trim();
-    const pageSlug = ITEM_CLASS_SLUGS[normalised] ?? 'Rings';
+    let results: ModResult[];
 
-    const cacheKey = `crafting:mods:${this.ctx.leagueState.patchVersion}:${pageSlug}`;
-    let entries = this.ctx.cache.get<PoedbModEntry[]>(cacheKey);
+    if (influence) {
+      results = await this.getInfluencedMods(influence, itemClass);
+    } else {
+      const itemClasses = await getItemClasses();
+      // Default to "ring" only when itemClass was omitted entirely -- a typo'd
+      // or unrecognized class must NOT silently fall back to plausible-looking
+      // Ring data, it should return nothing.
+      const classKey = resolveItemClassKey(itemClasses, itemClass ?? 'ring');
+      if (!classKey) {
+        this.ctx.logger.warn(`[crafting] Unknown item class "${itemClass}" -- returning no results`);
+        return [];
+      }
+      const tags = await getItemClassTags(this.ctx, classKey);
+      const mods = await getMods();
 
-    if (!entries) {
-      try {
-        const html = await this.fetchHtml(pageSlug);
-        entries = this.parseModArray(html);
-        if (entries.length > 0) {
-          this.ctx.cache.set(cacheKey, entries, CRAFTING_TTL_MS);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        this.ctx.logger.error(`[crafting_mod_lookup] Failed to fetch ${pageSlug}: ${msg}`);
+      results = [];
+      for (const mod of Object.values(mods)) {
+        if (mod.domain !== 'item') continue;
+        // Essence-only mods (e.g. "of the Essence") have no real spawn tag and
+        // would otherwise only be excluded incidentally because their only
+        // spawn_weights entry is "default":0 -- check the flag explicitly so a
+        // future essence-only mod with a nonzero non-default weight can't leak
+        // into normal search results.
+        if (mod.is_essence_only) continue;
+        if (mod.generation_type !== 'prefix' && mod.generation_type !== 'suffix') continue;
+        if (!mod.text) continue;
+
+        const weight = resolveSpawnWeight(mod, tags);
+        if (!weight) continue;
+
+        results.push(toModResult(mod, weight));
+      }
+    }
+
+    const q = query.toLowerCase().trim();
+    if (!q) return results;
+
+    return results.filter((m) => {
+      return (
+        m.text.toLowerCase().includes(q) ||
+        m.name.toLowerCase().includes(q) ||
+        m.family.toLowerCase().includes(q)
+      );
+    });
+  }
+
+  /**
+   * Look up influence-specific item modifiers.
+   *
+   * @param influence Influence type: shaper|elder|crusader|hunter|warlord|redeemer|synthesis|eldritch
+   * @param itemClass Optional item class filter, e.g. "ring", "helmet"
+   */
+  async getInfluencedMods(influence: string, itemClass?: string): Promise<ModResult[]> {
+    const key = influence.trim().toLowerCase();
+    const itemClasses = await getItemClasses();
+    const mods = await getMods();
+
+    // Resolve itemClass once, up front, for both branches below. An
+    // unrecognized item class must return [] (not silently ignore the
+    // filter) -- only an OMITTED item class means "no class filter".
+    let classKey: string | undefined;
+    if (itemClass) {
+      classKey = resolveItemClassKey(itemClasses, itemClass);
+      if (!classKey) {
+        this.ctx.logger.warn(`[crafting] Unknown item class "${itemClass}" -- returning no results`);
         return [];
       }
     }
 
-    // Determine which generation types to include
-    // ModGenerationTypeID "2" = normal explicit mods
-    // "3" = synthesis implicit, "5" = corrupted, etc.
-    const influenceGenTypes = this.influenceToGenTypes(influence);
+    const codename = INFLUENCE_CODENAMES[key];
+    if (codename) {
+      // classInfluenceTags stays undefined ONLY when no itemClass was given
+      // (meaning: don't filter by class at all). Whenever a class WAS given
+      // and resolved, this is always an array -- possibly empty, if that
+      // class can't roll influence mods at all (e.g. Belt) -- so the
+      // `.includes()` check below correctly yields zero matches for it,
+      // rather than falling through as "no filter" the way an `undefined`
+      // fallback would.
+      const classInfluenceTags: string[] | undefined = classKey
+        ? itemClasses[classKey]?.influence_tags ?? []
+        : undefined;
 
-    return entries
-      .filter((e) => {
-        // Generation type filter
-        if (influenceGenTypes.length > 0 && !influenceGenTypes.includes(e.ModGenerationTypeID)) {
-          return false;
+      const results: ModResult[] = [];
+      for (const mod of Object.values(mods)) {
+        if (mod.domain !== 'item' || !mod.text) continue;
+
+        for (const sw of mod.spawn_weights) {
+          if (!sw.tag.endsWith(`_${codename}`)) continue;
+          if (classInfluenceTags && !classInfluenceTags.includes(sw.tag)) continue;
+          if (sw.weight > 0) results.push(toModResult(mod, sw.weight));
+          break; // a mod only carries one influence-family tag
         }
-        // For normal mods (no influence filter), only include explicit (type 2)
-        if (!influence && e.ModGenerationTypeID !== '2') return false;
-
-        // Query text filter (strip HTML from str for matching)
-        if (query) {
-          const cleanText = this.stripHtml(e.str).toLowerCase();
-          const cleanName = e.Name.toLowerCase();
-          const familyName = (e.ModFamilyList[0] ?? '').toLowerCase();
-          const q = query.toLowerCase();
-          if (!cleanText.includes(q) && !cleanName.includes(q) && !familyName.includes(q)) {
-            return false;
-          }
-        }
-
-        return true;
-      })
-      .map((e) => this.normalizeModEntry(e));
-  }
-
-  // ── Harvest crafts ─────────────────────────────────────────────────────────
-
-  getHarvestOptions(tag?: string, itemClass?: string): HarvestCraft[] {
-    let results = HARVEST_CRAFTS;
-
-    if (tag) {
-      const lowerTag = tag.toLowerCase();
-      results = results.filter((c) => c.tag.toLowerCase() === lowerTag);
+      }
+      return results;
     }
 
-    if (itemClass) {
-      const lowerClass = itemClass.toLowerCase();
-      results = results.filter(
-        (c) =>
-          c.applicableTo.includes('any') ||
-          c.applicableTo.some((a) => a.toLowerCase().includes(lowerClass)) ||
-          lowerClass.includes(c.applicableTo.find((a) => lowerClass.includes(a)) ?? '__no_match__')
-      );
+    const allowedGenTypes = GENERATION_TYPE_INFLUENCES[key];
+    if (!allowedGenTypes) {
+      this.ctx.logger.warn(`[crafting] Unknown influence "${influence}" -- returning no results`);
+      return [];
     }
 
+    const tags = classKey ? await getItemClassTags(this.ctx, classKey) : undefined;
+    const results: ModResult[] = [];
+    for (const mod of Object.values(mods)) {
+      if (mod.domain !== 'item' || !mod.text) continue;
+      if (!allowedGenTypes.includes(mod.generation_type)) continue;
+
+      const weight = tags ? resolveSpawnWeight(mod, tags) : mod.spawn_weights[0]?.weight ?? 0;
+      if (!weight) continue;
+
+      results.push(toModResult(mod, weight));
+    }
     return results;
-  }
-
-  // ── Influenced mods ────────────────────────────────────────────────────────
-
-  async getInfluencedMods(influence: string, itemClass?: string): Promise<ModResult[]> {
-    return this.searchMods('', itemClass, influence);
-  }
-
-  // ── Private helpers ────────────────────────────────────────────────────────
-
-  /** Map an influence name to the poedb ModGenerationTypeID values that represent it */
-  private influenceToGenTypes(influence?: string): string[] {
-    if (!influence) return [];
-    switch (influence.toLowerCase()) {
-      case 'synthesis': return ['3', '8'];
-      case 'corrupted': return ['5'];
-      case 'scourge': return ['24', '25'];
-      // Shaper/Elder/Crusader/Hunter/Warlord/Redeemer mods are all "normal" gen type (2)
-      // but tagged in fossil_no — we filter by tag below
-      default: return ['2'];
-    }
-  }
-
-  private normalizeModEntry(e: PoedbModEntry): ModResult {
-    return {
-      name: e.Name,
-      level: parseInt(e.Level, 10),
-      weight: e.DropChance,
-      family: e.ModFamilyList[0] ?? '',
-      text: this.stripHtml(e.str),
-      tags: e.fossil_no,
-      generationType: GEN_TYPE[e.ModGenerationTypeID] ?? e.ModGenerationTypeID,
-    };
   }
 }
 

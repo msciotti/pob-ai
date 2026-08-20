@@ -104,6 +104,9 @@ importers:
 
   packages/plugin-crafting:
     dependencies:
+      '@poe-ai/game-data':
+        specifier: workspace:*
+        version: link:../game-data
       zod:
         specifier: '3'
         version: 3.25.76

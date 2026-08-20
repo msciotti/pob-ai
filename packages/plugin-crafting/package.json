@@ -1,7 +1,7 @@
 {
   "name": "@poe-ai/plugin-crafting",
   "version": "0.1.0",
-  "description": "poedb.tw crafting knowledge plugin — fossils, essences, influenced mods, harvest crafting",
+  "description": "Crafting knowledge plugin (local RePoE game data) — fossils, essences, influenced mods, harvest crafting",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -18,6 +18,9 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@poe-ai/game-data": "workspace:*"
   },
   "peerDependencies": {
     "@poe-ai/core": "workspace:*",

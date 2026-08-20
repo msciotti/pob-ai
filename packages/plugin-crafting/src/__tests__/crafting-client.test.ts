@@ -1,146 +1,92 @@
-import { describe, it, expect, vi } from 'vitest';
-import { CraftingClient, generateCraftofExileLink } from '../crafting-client.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import type { PluginContext } from '@poe-ai/core';
 import { TtlCache } from '@poe-ai/core';
 
-function makeCtx(patchVersion = '3.26.0'): PluginContext {
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURES_DIR = join(__dirname, 'fixtures');
+const EMPTY_DIR = join(__dirname, 'fixtures-missing');
+
+const ORIGINAL_ENV = process.env.POE_AI_REPOE_DIR;
+
+function makeCtx(): PluginContext {
   return {
     http: { get: vi.fn(), post: vi.fn() },
     cache: new TtlCache(),
-    leagueState: { currentLeague: 'Standard', patchVersion, hardcore: false, ssf: false },
+    leagueState: { currentLeague: 'Standard', patchVersion: '3.26.0', hardcore: false, ssf: false },
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 }
 
-// Minimal HTML that mimics the poedb fossil page's spawn-weight-multiplier section
-const FAKE_FOSSIL_HTML = `
-<html><body>
-<h2 id="spawn-weight-multipliers">Spawn Weight Multipliers</h2>
-<p>Using this fossil multiplies the spawn weights of all modifiers with &quot;elemental&quot; tags by 6,
-modifiers with both &quot;physical&quot; and &quot;ailment&quot; tags by 0.</p>
-<ul>
-<li><span class='badge bg-primary'>Elemental</span> x600%</li>
-<li><span class='badge bg-primary'><i>bleed</i></span> x0%</li>
-</ul>
-</body></html>
-`;
+beforeEach(() => {
+  vi.resetModules();
+  process.env.POE_AI_REPOE_DIR = FIXTURES_DIR;
+});
 
-// Minimal HTML that mimics the poedb essence page's Essence Modifiers table
-const FAKE_ESSENCE_HTML = `
-<html><body>
-<h2>Essence Modifiers /4</h2>
-<table class='table table-hover table-striped mb-0 filters bg-dark'>
-  <thead><tr><th>Generation</th><th>Description</th></tr></thead>
-  <tbody>
-    <tr>
-      <td>Prefix</td>
-      <td>Adds <span class='mod-value'>(134\u2014184)</span> to <span class='mod-value'>(270\u2014313)</span> Cold Damage
-        <span class='float-end'>
-          <span class="badge bg-primary craftingdamage" data-tag="damage">Damage</span>
-          <span class="badge bg-primary craftingelemental" data-tag="elemental">Elemental</span>
-          <span class="badge bg-primary craftingcold" data-tag="cold">Cold</span>
-          <span class="badge bg-primary craftingattack" data-tag="attack">Attack</span>
-        </span>
-      </td>
-    </tr>
-    <tr>
-      <td>Suffix</td>
-      <td><span class='mod-value'>+(46\u201448)</span>% to Cold Resistance
-        <span class='float-end'>
-          <span class="badge bg-primary craftingelemental" data-tag="elemental">Elemental</span>
-          <span class="badge bg-primary craftingcold" data-tag="cold">Cold</span>
-          <span class="badge bg-primary craftingresistance" data-tag="resistance">Resistance</span>
-        </span>
-      </td>
-    </tr>
-  </tbody>
-</table>
-</body></html>
-`;
-
-// Minimal HTML that mimics the poedb item class page with embedded mod JSON array
-const chaosResistMod = {
-  Name: 'of Bameth',
-  Level: '81',
-  ModGenerationTypeID: '2',
-  ModFamilyList: ['ChaosResistance'],
-  DropChance: 250,
-  str: "<span class='mod-value'>+(31\u201435)</span>% to Chaos Resistance",
-  fossil_no: ['chaos', 'resistance'],
-  adds_no: [],
-  spawn_no: ['armour', 'ring', 'amulet', 'belt', 'quiver', 'default'],
-  mod_no: [],
-  hover: '',
-};
-const FAKE_RINGS_HTML = `<html><body>[${JSON.stringify(chaosResistMod)}]</body></html>`;
+afterEach(() => {
+  if (ORIGINAL_ENV === undefined) {
+    delete process.env.POE_AI_REPOE_DIR;
+  } else {
+    process.env.POE_AI_REPOE_DIR = ORIGINAL_ENV;
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // getFossil
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('CraftingClient.getFossil', () => {
-  it('parses spawnWeightMultipliers from poedb HTML', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_FOSSIL_HTML);
+  it('parses spawnWeightMultipliers from local fossil data', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const client = new CraftingClient(ctx);
     const result = await client.getFossil('Prismatic Fossil');
 
     expect(result.error).toBeUndefined();
-    expect(result.spawnWeightMultipliers).toHaveLength(2);
-    expect(result.spawnWeightMultipliers[0]).toMatchObject({ tags: ['elemental'], multiplier: 6 });
-    expect(result.spawnWeightMultipliers[1]).toMatchObject({ tags: ['bleed'], multiplier: 0 });
+    expect(result.spawnWeightMultipliers).toContainEqual({ tags: ['elemental'], multiplier: 6 });
+    expect(result.spawnWeightMultipliers).toContainEqual({ tags: ['bleed'], multiplier: 0 });
+    expect(result.spawnWeightMultipliers).toContainEqual({ tags: ['poison'], multiplier: 0 });
   });
 
-  it('parses description text from poedb HTML', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_FOSSIL_HTML);
+  it('parses description text from descriptions + blocked_descriptions', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const client = new CraftingClient(ctx);
     const result = await client.getFossil('Prismatic Fossil');
 
-    expect(result.description).toContain('elemental');
+    expect(result.description).toContain('Elemental');
   });
 
-  it('caches correctly — second call does not hit HTTP', async () => {
-    const ctx = makeCtx();
-    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
-    httpGet.mockResolvedValue(FAKE_FOSSIL_HTML);
+  it('is case-insensitive and trims whitespace on name lookup', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const client = new CraftingClient(ctx);
-    await client.getFossil('Prismatic Fossil');
-    await client.getFossil('Prismatic Fossil');
+    const result = await client.getFossil('  prismatic fossil  ');
 
-    expect(httpGet).toHaveBeenCalledTimes(1);
+    expect(result.error).toBeUndefined();
+    expect(result.name).toBe('Prismatic Fossil');
   });
 
-  it('cache key includes patchVersion — different patches cause separate HTTP calls', async () => {
-    const sharedCache = new TtlCache();
-    const ctxV1 = makeCtx('3.25.0');
-    ctxV1.cache = sharedCache;
-    const ctxV2 = makeCtx('3.26.0');
-    ctxV2.cache = sharedCache;
+  it('returns error field for a nonexistent fossil', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const mockGet = vi.fn().mockResolvedValue(FAKE_FOSSIL_HTML);
-    ctxV1.http = { get: mockGet, post: vi.fn() } as any;
-    ctxV2.http = { get: mockGet, post: vi.fn() } as any;
-
-    await new CraftingClient(ctxV1).getFossil('Prismatic Fossil');
-    await new CraftingClient(ctxV2).getFossil('Prismatic Fossil');
-
-    expect(mockGet).toHaveBeenCalledTimes(2);
-  });
-
-  it('returns error field when HTTP fails', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network timeout'));
-
-    const client = new CraftingClient(ctx);
-    const result = await client.getFossil('Scorched Fossil');
+    const result = await client.getFossil('Nonexistent Fossil Zzz999');
 
     expect(result.error).toBeDefined();
-    expect(result.error).toContain('Scorched Fossil');
     expect(result.spawnWeightMultipliers).toEqual([]);
+  });
+
+  it('surfaces a clear error when the repoe-data directory is missing', async () => {
+    process.env.POE_AI_REPOE_DIR = EMPTY_DIR;
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const result = await client.getFossil('Prismatic Fossil');
+
+    expect(result.error).toContain('pnpm download-repoe');
   });
 });
 
@@ -149,41 +95,39 @@ describe('CraftingClient.getFossil', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('CraftingClient.getEssence', () => {
-  it('parses mods from the Essence Modifiers table', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_ESSENCE_HTML);
+  it('parses and deduplicates mods across item classes', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const client = new CraftingClient(ctx);
-    const result = await client.getEssence('Deafening Essence of Hatred');
+    const result = await client.getEssence('Whispering Essence of Hatred');
 
     expect(result.error).toBeUndefined();
+    // 4 item classes map to only 2 distinct mod ids (ColdDamagePercentEssence1, ColdResist1)
     expect(result.mods).toHaveLength(2);
-    expect(result.mods[0].generation).toBe('Prefix');
-    expect(result.mods[0].text).toContain('Cold Damage');
-    expect(result.mods[0].tags).toContain('cold');
-    expect(result.mods[1].generation).toBe('Suffix');
-    expect(result.mods[1].text).toContain('Cold Resistance');
-    expect(result.mods[1].tags).toContain('resistance');
+    expect(result.mods.find((m) => m.text.includes('Cold Damage'))).toMatchObject({
+      generation: 'Suffix',
+      tags: expect.arrayContaining(['cold']),
+    });
+    expect(result.mods.find((m) => m.text.includes('Cold Resistance'))).toMatchObject({
+      generation: 'Suffix',
+    });
   });
 
-  it('caches correctly — second call does not hit HTTP', async () => {
-    const ctx = makeCtx();
-    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
-    httpGet.mockResolvedValue(FAKE_ESSENCE_HTML);
+  it('skips mod ids that are not in local mod data', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const client = new CraftingClient(ctx);
-    await client.getEssence('Deafening Essence of Hatred');
-    await client.getEssence('Deafening Essence of Hatred');
+    const result = await client.getEssence('Broken Essence of Hatred');
 
-    expect(httpGet).toHaveBeenCalledTimes(1);
+    expect(result.error).toBeUndefined();
+    expect(result.mods).toEqual([]);
   });
 
-  it('returns error field when HTTP fails', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network error'));
+  it('returns error field for a nonexistent essence', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const client = new CraftingClient(ctx);
-    const result = await client.getEssence('Deafening Essence of Hatred');
+    const result = await client.getEssence('Nonexistent Essence Zzz999');
 
     expect(result.error).toBeDefined();
     expect(result.mods).toEqual([]);
@@ -195,100 +139,258 @@ describe('CraftingClient.getEssence', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('CraftingClient.searchMods', () => {
-  it('parses mod entries from the embedded JSON array', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_RINGS_HTML);
+  it('resolves spawn weight via first-matching-tag-wins against the item class tag set', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const client = new CraftingClient(ctx);
     const results = await client.searchMods('chaos resistance', 'ring');
 
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe('of Bameth');
-    expect(results[0].weight).toBe(250);
-    expect(results[0].tags).toContain('chaos');
-    expect(results[0].text).toContain('Chaos Resistance');
-    expect(results[0].generationType).toBe('normal');
+    expect(results[0]).toMatchObject({
+      name: 'of Bameth',
+      level: 81,
+      weight: 250,
+      family: 'ChaosResistance',
+      generationType: 'suffix',
+    });
+    expect(results[0].tags).toEqual(['chaos', 'resistance']);
   });
 
-  it('caches the item-class page — second call with same class does not re-fetch', async () => {
-    const ctx = makeCtx();
-    const httpGet = ctx.http.get as ReturnType<typeof vi.fn>;
-    httpGet.mockResolvedValue(FAKE_RINGS_HTML);
+  it('defaults to "ring" when itemClass is omitted', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const client = new CraftingClient(ctx);
-    await client.searchMods('chaos', 'ring');
-    await client.searchMods('resistance', 'ring');
+    const results = await client.searchMods('brute');
 
-    // Both queries hit the same cached page
-    expect(httpGet).toHaveBeenCalledTimes(1);
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe('of the Brute');
   });
 
-  it('returns empty array when HTTP fails', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('timeout'));
+  it('resolves item class case-insensitively and against the plural display name', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
-    const client = new CraftingClient(ctx);
-    const results = await client.searchMods('life', 'ring');
+    const byCase = await client.searchMods('strength', 'RING');
+    const byDisplayName = await client.searchMods('strength', 'Rings');
+
+    expect(byCase).toHaveLength(1);
+    expect(byDisplayName).toHaveLength(1);
+    expect(byCase[0].name).toBe('of the Brute');
+  });
+
+  it('excludes essence-only mods (0 weight for every class) from normal search', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.searchMods('cold damage', 'ring');
 
     expect(results).toEqual([]);
   });
 
-  it('filters out non-normal gen types when no influence specified', async () => {
-    const synthesisEntry = { ...chaosResistMod, ModGenerationTypeID: '3', Name: 'SynthesisMod' };
-    const htmlWithBoth = `<html><body>[${JSON.stringify(chaosResistMod)},${JSON.stringify(synthesisEntry)}]</body></html>`;
+  it('excludes essence-only mods via the explicit flag, not just incidental zero weight', async () => {
+    // EssenceOnlyLeakTest is_essence_only:true but has a nonzero, non-default
+    // ("ring": 500) spawn weight -- if the is_essence_only check were ever
+    // dropped in favour of relying on weight alone, this mod would leak into
+    // ring search results.
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
 
+    const results = await client.searchMods('essence-only leak', 'ring');
+
+    expect(results).toEqual([]);
+  });
+
+  it('excludes corrupted-implicit mods from normal (prefix/suffix) search', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.searchMods('maximum life', 'ring');
+
+    expect(results).toEqual([]);
+  });
+
+  it('returns empty array for a query that matches nothing', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.searchMods('zzznomatchxyz', 'ring');
+
+    expect(results).toEqual([]);
+  });
+
+  it('caches the resolved item-class tag set under a patch-versioned key', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
     const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue(htmlWithBoth);
-
     const client = new CraftingClient(ctx);
-    const results = await client.searchMods('chaos resistance', 'ring');
 
-    // Only the normal (type 2) mod should appear
-    expect(results.every((r) => r.generationType === 'normal')).toBe(true);
+    await client.searchMods('strength', 'ring');
+
+    const cached = ctx.cache.get('crafting:classtags:3.29.3.1.4:Ring');
+    expect(cached).toBeDefined();
+  });
+
+  it('derives the Boots tag set as the intersection across bases -- str_armour/dex_armour stripped', async () => {
+    // BootsStr1 has tags [boots, armour, str_armour, default] and BootsDex1 has
+    // [boots, armour, dex_armour, default] -- only the tags shared by every
+    // base of the class should survive into the resolved tag set.
+    const { CraftingClient } = await import('../crafting-client.js');
+    const ctx = makeCtx();
+    const client = new CraftingClient(ctx);
+
+    await client.searchMods('', 'boots');
+
+    const cached = ctx.cache.get<string[]>('crafting:classtags:3.29.3.1.4:Boots');
+    expect(cached).toBeDefined();
+    expect([...(cached as string[])].sort()).toEqual(['armour', 'boots', 'default']);
+  });
+
+  it('resolves spawn weight via the FIRST matching tag, not the highest weight among matches', async () => {
+    // FirstMatchOrderTest's spawn_weights lists "armour":100 before "boots":900.
+    // Both tags are in the resolved Boots tag set, so a correct
+    // first-match-wins implementation returns 100; a max-weight
+    // implementation would incorrectly return 900.
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.searchMods('ordering', 'boots');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].weight).toBe(100);
+  });
+
+  it('returns an empty array and warns for an unresolvable item class, instead of falling back to Ring', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const ctx = makeCtx();
+    const client = new CraftingClient(ctx);
+
+    const results = await client.searchMods('strength', 'not-a-real-item-class');
+
+    expect(results).toEqual([]);
+    expect(ctx.logger.warn).toHaveBeenCalled();
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// getHarvestOptions
+// getInfluencedMods
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('CraftingClient.getHarvestOptions', () => {
-  it('returns all options when called with no filters', () => {
+describe('CraftingClient.getInfluencedMods', () => {
+  it('maps "shaper" to the "shaper" spawn-weight codename', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.getInfluencedMods('shaper', 'boots');
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ name: "The Shaper's", weight: 800 });
+  });
+
+  it('maps "hunter" to the "basilisk" internal codename', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.getInfluencedMods('hunter', 'boots');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe("Hunter's");
+  });
+
+  it('maps "warlord" to the "adjudicator" internal codename', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.getInfluencedMods('warlord', 'boots');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe("Warlord's");
+  });
+
+  it('maps "redeemer" to the "eyrie" internal codename', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.getInfluencedMods('redeemer', 'boots');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe('Redeemer\'s');
+  });
+
+  it('maps "crusader" to its own name (no codename translation needed)', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.getInfluencedMods('crusader', 'boots');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe("Crusader's");
+  });
+
+  it('is scoped to the given item class — a ring-only mod is excluded from boots results', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const bootsResults = await client.getInfluencedMods('shaper', 'boots');
+    const ringResults = await client.getInfluencedMods('shaper', 'ring');
+
+    expect(bootsResults.map((m) => m.name)).not.toContain("Shaper's");
+    expect(ringResults.map((m) => m.name)).toContain("Shaper's");
+  });
+
+  it('returns results across all item classes when itemClass is omitted', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.getInfluencedMods('shaper');
+
+    const names = results.map((m) => m.name);
+    expect(names).toContain("The Shaper's");
+    expect(names).toContain("Shaper's");
+  });
+
+  it('CRITICAL: returns [] for a class that resolves but cannot roll influence mods at all (Belt), instead of leaking other classes\' mods', async () => {
+    // Belt has no `influence_tags` in item_classes.min.json at all (it's not
+    // one of the classes that can be shaper/elder/etc. influenced). Before the
+    // fix, `classInfluenceTags` was `undefined` in this case -- indistinguishable
+    // from "itemClass omitted" -- so the filter was skipped entirely and every
+    // other class's shaper mods (Boots', Ring's) leaked into "belt" results.
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.getInfluencedMods('shaper', 'belt');
+
+    expect(results).toEqual([]);
+  });
+
+  it('returns an empty array and warns for an unresolvable item class', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
     const ctx = makeCtx();
-    const results = new CraftingClient(ctx).getHarvestOptions();
+    const client = new CraftingClient(ctx);
+
+    const results = await client.getInfluencedMods('shaper', 'not-a-real-item-class');
+
+    expect(results).toEqual([]);
+    expect(ctx.logger.warn).toHaveBeenCalled();
+  });
+
+  it('returns an empty array and warns for an unrecognized influence', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const ctx = makeCtx();
+    const client = new CraftingClient(ctx);
+
+    const results = await client.getInfluencedMods('nonsense-influence', 'boots');
+
+    expect(results).toEqual([]);
+    expect(ctx.logger.warn).toHaveBeenCalled();
+  });
+
+  it('resolves the "corrupted" influence via generation_type', async () => {
+    const { CraftingClient } = await import('../crafting-client.js');
+    const client = new CraftingClient(makeCtx());
+
+    const results = await client.getInfluencedMods('corrupted', 'ring');
+
     expect(results.length).toBeGreaterThan(0);
-  });
-
-  it('filters by tag — only returns crafts with matching tag', () => {
-    const ctx = makeCtx();
-    const results = new CraftingClient(ctx).getHarvestOptions('life');
-    expect(results.length).toBeGreaterThan(0);
-    for (const craft of results) {
-      expect(craft.tag).toBe('life');
-    }
-  });
-
-  it('returns empty array for a tag with no crafts', () => {
-    const ctx = makeCtx();
-    expect(new CraftingClient(ctx).getHarvestOptions('nonexistent_xyz')).toEqual([]);
-  });
-
-  it('filters by itemClass — defence crafts available for armour', () => {
-    const ctx = makeCtx();
-    const results = new CraftingClient(ctx).getHarvestOptions('defence', 'armour');
-    expect(results.length).toBeGreaterThan(0);
-  });
-
-  it('each result has required HarvestCraft fields', () => {
-    const ctx = makeCtx();
-    for (const craft of new CraftingClient(ctx).getHarvestOptions()) {
-      expect(craft).toHaveProperty('name');
-      expect(craft).toHaveProperty('description');
-      expect(craft).toHaveProperty('tag');
-      expect(craft).toHaveProperty('colour');
-      expect(craft).toHaveProperty('applicableTo');
-      expect(craft).toHaveProperty('operation');
-    }
+    expect(results.every((m) => m.generationType === 'corrupted')).toBe(true);
   });
 });
 
@@ -298,25 +400,22 @@ describe('CraftingClient.getHarvestOptions', () => {
 
 describe('fossilInfoTool handler', () => {
   it('returns a valid ToolResult shape on success', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockResolvedValue(FAKE_FOSSIL_HTML);
-
     const { fossilInfoTool } = await import('../tools/fossil-info.js');
-    const result = await fossilInfoTool.handler({ fossilName: 'Prismatic Fossil' }, ctx);
+    const result = await fossilInfoTool.handler({ fossilName: 'Prismatic Fossil' }, makeCtx());
 
     expect(result).toHaveProperty('content');
     expect(Array.isArray(result.content)).toBe(true);
     expect(result.content[0]).toHaveProperty('type', 'text');
     expect(typeof result.content[0].text).toBe('string');
     expect(result.isError).toBeUndefined();
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed).toHaveProperty('craftofexile_url');
   });
 
-  it('returns isError: true when HTTP fails', async () => {
-    const ctx = makeCtx();
-    (ctx.http.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('HTTP failure'));
-
+  it('returns isError: true for a fossil not found in local data', async () => {
     const { fossilInfoTool } = await import('../tools/fossil-info.js');
-    const result = await fossilInfoTool.handler({ fossilName: 'Scorched Fossil' }, ctx);
+    const result = await fossilInfoTool.handler({ fossilName: 'Nonexistent Fossil Zzz999' }, makeCtx());
 
     expect(result.isError).toBe(true);
     expect(result.content[0].type).toBe('text');
@@ -330,11 +429,13 @@ describe('fossilInfoTool handler', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('generateCraftofExileLink', () => {
-  it('returns the correct URL for "fossil"', () => {
+  it('returns the correct URL for "fossil"', async () => {
+    const { generateCraftofExileLink } = await import('../crafting-client.js');
     expect(generateCraftofExileLink('fossil')).toBe('https://www.craftofexile.com/?m=fossil');
   });
 
-  it('encodes special characters in the method', () => {
+  it('encodes special characters in the method', async () => {
+    const { generateCraftofExileLink } = await import('../crafting-client.js');
     const url = generateCraftofExileLink('essence craft');
     expect(url).toContain('essence');
     expect(url).not.toContain(' ');

@@ -11,7 +11,7 @@ type Input = z.infer<typeof inputSchema>;
 export const fossilInfoTool: PluginTool<Input> = {
   name: 'crafting_fossil_info',
   description:
-    'Look up crafting information about a Path of Exile fossil from poedb.tw. ' +
+    'Look up crafting information about a Path of Exile fossil from local game data. ' +
     'Returns the fossil\'s mod tags, effects, and a craftofexile.com deep link for planning fossil crafts.',
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   inputSchema: inputSchema as any,

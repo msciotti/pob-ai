@@ -148,7 +148,7 @@ describe('CraftingClient.searchMods', () => {
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({
       name: 'of Bameth',
-      level: 81,
+      requiredLevel: 81,
       weight: 250,
       family: 'ChaosResistance',
       generationType: 'suffix',

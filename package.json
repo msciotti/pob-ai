@@ -1,6 +1,7 @@
 {
   "name": "pob-mcp",
   "version": "0.1.0",
+  "private": true,
   "description": "MCP server for Path of Building - enables LLMs to analyze and optimize PoE builds",
   "type": "module",
   "main": "dist/index.js",
@@ -19,7 +20,7 @@
     "test:mcp:coverage": "vitest run --coverage",
     "test:all": "pnpm test:mcp && pnpm test",
     "mvp": "pnpm build && node dist/mvp-test.js",
-    "download-repoe": "node scripts/download-repoe.js",
+    "download-repoe": "pnpm --filter @poe-ai/game-data download-repoe",
     "workspace:build": "pnpm -r build",
     "workspace:test": "pnpm --filter '!@poe-ai/integration-tests' -r test"
   },

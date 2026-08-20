@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import readline from 'readline';
 import { platform } from 'os';
 import type { PobRuntime } from '@poe-ai/core';
+import { assertTreeVersionsAvailable, decodePobBuildCode } from './tree-version-guard.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -82,7 +83,13 @@ export class LuaJITRuntime implements PobRuntime {
       // Bridge script lives in packages/plugin-pob/scripts/
       const bridgeScript = join(LuaJITRuntime.pluginRoot, 'scripts', 'pob-bridge.lua');
 
-      const absoluteLuajitPath = this.luajitPath.startsWith('/')
+      // A bare command name (e.g. 'luajit', the system-PATH fallback when no
+      // bundled binary was built — see the constructor) has no path
+      // separator at all; joining it with cwd would turn it into a specific
+      // nonexistent file instead of letting spawn()'s PATH lookup resolve
+      // it. Only an actual relative *path* (containing a separator) needs
+      // resolving against cwd.
+      const absoluteLuajitPath = this.luajitPath.startsWith('/') || !this.luajitPath.includes('/')
         ? this.luajitPath
         : join(process.cwd(), this.luajitPath);
       const absoluteDkjsonPath = this.dkjsonPath.startsWith('/')
@@ -226,6 +233,7 @@ export class LuaJITRuntime implements PobRuntime {
    * Load build from XML
    */
   async loadBuildFromXML(xml: string, buildName: string = 'Imported Build'): Promise<void> {
+    assertTreeVersionsAvailable(xml, this.pobPath);
     const response = await this.sendCommand('loadBuildFromXML', {
       xml,
       name: buildName,
@@ -238,6 +246,8 @@ export class LuaJITRuntime implements PobRuntime {
    * Import build from pastebin code
    */
   async importFromCode(code: string, buildName: string = 'Imported Build'): Promise<void> {
+    const xml = decodePobBuildCode(code);
+    if (xml) assertTreeVersionsAvailable(xml, this.pobPath);
     const response = await this.sendCommand('importFromCode', {
       code,
       name: buildName,
@@ -646,6 +656,8 @@ export class LuaJITRuntime implements PobRuntime {
     compare: BuildProfile;
     primaryReplaced: boolean;
   }> {
+    const xml = decodePobBuildCode(code);
+    if (xml) assertTreeVersionsAvailable(xml, this.pobPath);
     const response = await this.sendCommand('compareBuilds', { code, label });
     return {
       primary: asBuildProfile(response['primary']),

@@ -11,8 +11,15 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "files": [
+    "dist"
+  ],
   "bin": {
-    "poe-ai-mcp": "./dist/main-stdio.js"
+    "poe-ai-mcp": "./dist/main-stdio.js",
+    "poe-ai": "./dist/cli/main.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -36,7 +43,8 @@
     "@poe-ai/plugin-ninja": "workspace:*",
     "@poe-ai/plugin-wealth": "workspace:*",
     "@poe-ai/plugin-archetypes": "workspace:*",
-    "@poe-ai/plugin-crafting": "workspace:*"
+    "@poe-ai/plugin-crafting": "workspace:*",
+    "@poe-ai/game-data": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

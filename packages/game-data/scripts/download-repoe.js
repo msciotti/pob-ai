@@ -24,8 +24,10 @@
  * written inside that same temp dir so it can never describe data that
  * didn't fully land.
  *
- * Run manually via `pnpm download-repoe` (not wired into postinstall --
- * this is ~25MB and only needed by plugins that depend on @poe-ai/game-data).
+ * Run manually via `pnpm --filter @poe-ai/game-data download-repoe` (not
+ * wired into postinstall -- this is ~25MB and only needed by plugins that
+ * depend on @poe-ai/game-data; `poe-ai init` runs it automatically when
+ * @poe-ai/plugin-crafting is one of the enabled plugins).
  *
  * The core logic is exported as `runDownload` (with injectable fetchers and
  * data dir) so it can be exercised in tests without hitting the network --
@@ -190,7 +192,7 @@ export async function runDownload({
       warn(
         `⚠️  Live repoe-fork data (patch ${liveVersion}) has moved past the pinned commit ` +
           `${pinSha.slice(0, 7)} (patch ${pinnedVersion}). Data downloaded successfully, ` +
-          `but consider bumping REPOE_PIN_SHA in scripts/download-repoe.js to match.`
+          `but consider bumping REPOE_PIN_SHA in packages/game-data/scripts/download-repoe.js to match.`
       );
     }
 

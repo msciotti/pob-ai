@@ -9,19 +9,33 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./scripts/download-pob.js": "./scripts/download-pob.js",
+    "./scripts/download-luajit.js": "./scripts/download-luajit.js"
+  },
+  "files": [
+    "dist",
+    "scripts/download-pob.js",
+    "scripts/download-luajit.js",
+    "scripts/pob-bridge.lua"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "postinstall": "node scripts/download-pob.js && node scripts/download-luajit.js"
+    "download-pob": "node scripts/download-pob.js",
+    "download-luajit": "node scripts/download-luajit.js",
+    "setup": "node scripts/download-pob.js && node scripts/download-luajit.js"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "zod": "3"
+    "zod": "3",
+    "tar": "^7.5.2"
   },
   "peerDependencies": {
     "@poe-ai/core": "workspace:*"

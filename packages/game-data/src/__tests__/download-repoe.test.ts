@@ -3,13 +3,13 @@ import { existsSync } from 'fs';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
-// This exercises the real repo-root download script directly (not a
-// reimplementation) -- see scripts/download-repoe.js's own comment on why
-// `runDownload` takes injectable fetchers. Excluded from this package's
-// `tsc` build (see tsconfig.json) since it reaches outside the package's
-// rootDir; vitest transpiles it fine on its own.
+// This exercises the real download script directly (not a reimplementation)
+// -- see scripts/download-repoe.js's own comment on why `runDownload` takes
+// injectable fetchers. Excluded from this package's `tsc` build (see
+// tsconfig.json) since it reaches outside the package's rootDir; vitest
+// transpiles it fine on its own.
 // @ts-expect-error -- plain JS script outside this package, no type declarations
-import { runDownload, FILES, REPOE_PIN_SHA } from '../../../../scripts/download-repoe.js';
+import { runDownload, FILES, REPOE_PIN_SHA } from '../../scripts/download-repoe.js';
 
 const GOOD_FILES: Record<string, string> = {
   'version.txt': '3.29.3.1.4',

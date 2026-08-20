@@ -71,6 +71,28 @@ describe('computeStatChanges', () => {
     expect(order[2]).toBe('A');
   });
 
+  it('a stat going to exactly zero outranks and survives the cap against a flood of >100% relative changes', () => {
+    // Regression for the review round: going TO zero (e.g. Resolute
+    // Technique zeroing CritChance) is only a 100% decrease (relativeChange
+    // === 1) unless treated as unbounded like going FROM zero. Without that,
+    // enough >100% swings elsewhere can push it out of the capped top 25 --
+    // reintroducing the exact bug this function exists to fix.
+    const before: Record<string, number> = { CritChance: 25 };
+    const after: Record<string, number> = { CritChance: 0 };
+    for (let i = 0; i < 30; i++) {
+      before[`Noise${i}`] = 1;
+      after[`Noise${i}`] = 10; // +900% relative change -- far past 100%
+    }
+
+    const changes = computeStatChanges(before, after);
+    const order = Object.keys(changes);
+
+    expect(order[0]).toBe('CritChance'); // unbounded -- ranks above every finite change
+    expect(changes).toHaveProperty('CritChance');
+    expect(changes.CritChance).toEqual({ before: 25, after: 0, delta: -25 });
+    expect(order).toHaveLength(25); // still capped, and CritChance survives it
+  });
+
   it('caps the result at maxEntries, keeping the largest relative changes', () => {
     const before: Record<string, number> = {};
     const after: Record<string, number> = {};

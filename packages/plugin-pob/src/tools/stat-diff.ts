@@ -52,7 +52,13 @@ export function computeStatChanges(
     const delta = afterValue - beforeValue;
     if (Math.abs(delta) <= epsilon) continue;
 
-    const relativeChange = beforeValue !== 0 ? Math.abs(delta / beforeValue) : Infinity;
+    // Unbounded in both directions: a stat appearing from nothing (before
+    // === 0) is Infinity already since dividing by 0; a stat disappearing
+    // TO nothing (after === 0, e.g. Resolute Technique zeroing CritChance)
+    // only reaches relativeChange 1 (a 100% decrease) otherwise, which any
+    // >100% swing elsewhere would outrank past the cap -- so treat that
+    // case as Infinity too, matching "went to/from zero" above.
+    const relativeChange = beforeValue === 0 || afterValue === 0 ? Infinity : Math.abs(delta / beforeValue);
     changes.push({ key, before: beforeValue, after: afterValue, delta, relativeChange });
   }
 

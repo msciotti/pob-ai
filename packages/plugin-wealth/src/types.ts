@@ -38,14 +38,33 @@ export interface PricedItem {
   tabName: string;
 }
 
+/** An item we couldn't get a price for because pricing itself was unavailable
+ *  (as opposed to an item type we simply don't price, like rares) — still
+ *  reported so the user sees what's in the stash even without values. */
+export interface UnpricedItemSummary {
+  name: string;
+  typeLine: string;
+  category: string;
+  stackSize: number;
+  tabName: string;
+}
+
 /** Summary of total stash value */
 export interface WealthSummary {
   totalChaosValue: number;
   totalDivineValue: number;
   divinePrice: number;    // Current divine orb price in chaos
   byCategory: Record<string, { totalChaosValue: number; items: PricedItem[] }>;
-  unpricedItems: number;  // Items we couldn't price
+  unpricedItems: number;  // Items we couldn't price (any reason)
   tabsScanned: number;
+  /** False if poe.ninja pricing failed partway through (or entirely) —
+   *  stash contents/quantities are still returned in that case. */
+  pricingAvailable: boolean;
+  /** Set when pricingAvailable is false, explaining what happened. */
+  pricingWarning?: string;
+  /** Contents/quantities for items encountered while pricing was
+   *  unavailable — only populated when pricingAvailable is false. */
+  unpricedItemDetails?: UnpricedItemSummary[];
 }
 
 /** poe.ninja price entry (reused from ninja-client shape) */

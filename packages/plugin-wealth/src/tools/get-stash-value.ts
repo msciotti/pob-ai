@@ -4,7 +4,7 @@ import { StashClient } from '../stash-client.js';
 import { NinjaPriceCache } from '../ninja-prices.js';
 import { ItemPricer } from '../item-pricer.js';
 import { getCredentials } from '../index.js';
-import type { PricedItem, WealthSummary } from '../types.js';
+import type { PricedItem, UnpricedItemSummary, WealthSummary } from '../types.js';
 
 const inputSchema = z.object({
   league: z
@@ -72,11 +72,27 @@ export const getStashValueTool: PluginTool<Input> = {
         tabs = tabs.slice(0, StashClient.MAX_TABS);
       }
 
-      // 4. Get divine price for conversion
-      const divinePrice = await priceCache.getDivinePrice(targetLeague);
+      // 4. Get divine price for conversion. Pricing itself (poe.ninja) can be
+      // down or changed out from under us — that must never take down the
+      // whole tool. If it fails here, fall back to quantities-only for the
+      // entire scan; if it fails partway through the item loop below, fall
+      // back for whatever's left.
+      let pricingAvailable = true;
+      let pricingWarning: string | undefined;
+      let divinePrice = 1;
+
+      try {
+        divinePrice = await priceCache.getDivinePrice(targetLeague);
+      } catch (err) {
+        pricingAvailable = false;
+        const msg = err instanceof Error ? err.message : String(err);
+        pricingWarning = `poe.ninja pricing is unavailable (${msg}). Showing stash contents and quantities only — chaos/divine values could not be computed.`;
+        ctx.logger.warn(`[get_stash_value] ${pricingWarning}`);
+      }
 
       // 5. Fetch and price items from each tab
       const byCategory: WealthSummary['byCategory'] = {};
+      const unpricedItemDetails: UnpricedItemSummary[] = [];
       let totalChaosValue = 0;
       let unpricedItems = 0;
 
@@ -84,19 +100,41 @@ export const getStashValueTool: PluginTool<Input> = {
         const items = await stashClient.getTabItems(targetLeague, tab.index);
 
         for (const raw of items) {
-          const priced = await pricer.priceItem(raw, targetLeague);
-
-          if (!priced) {
-            unpricedItems++;
-            continue;
-          }
-
           const displayName =
             raw.frameType === 3
               ? raw.name.replace(/<<set:[^>]+>>/g, '').trim() || raw.typeLine
               : raw.typeLine;
-
           const stackSize = raw.stackSize ?? 1;
+
+          let priced: { chaosValue: number; category: string } | null = null;
+          if (pricingAvailable) {
+            try {
+              priced = await pricer.priceItem(raw, targetLeague);
+            } catch (err) {
+              pricingAvailable = false;
+              const msg = err instanceof Error ? err.message : String(err);
+              pricingWarning = `poe.ninja pricing failed partway through the scan (${msg}). Remaining items are shown as quantities only.`;
+              ctx.logger.warn(`[get_stash_value] ${pricingWarning}`);
+            }
+          }
+
+          if (!priced) {
+            unpricedItems++;
+            // Only record contents/quantities when the reason is a pricing
+            // outage, not just an item type we never price (rares, etc.) —
+            // that'd be noisy for the common case.
+            if (!pricingAvailable) {
+              unpricedItemDetails.push({
+                name: displayName,
+                typeLine: raw.typeLine,
+                category: raw.extended?.category ?? 'unknown',
+                stackSize,
+                tabName: tab.name,
+              });
+            }
+            continue;
+          }
+
           const pricedItem: PricedItem = {
             name: displayName,
             typeLine: raw.typeLine,
@@ -123,6 +161,9 @@ export const getStashValueTool: PluginTool<Input> = {
         byCategory,
         unpricedItems,
         tabsScanned: tabs.length,
+        pricingAvailable,
+        ...(pricingWarning ? { pricingWarning } : {}),
+        ...(unpricedItemDetails.length > 0 ? { unpricedItemDetails } : {}),
       };
 
       ctx.logger.info(

@@ -185,6 +185,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # `pnpm -r build` does not reliably wait for a dependency's build to fully
+      # land on disk before starting a dependent's — every package here resolves
+      # @poe-ai/core's types via its built dist/index.d.ts, so building core first
+      # (as the other two jobs above already do) avoids a race where e.g.
+      # plugin-pob's tsc starts before core/dist exists and fails with "Cannot find
+      # module '@poe-ai/core'". Reproduced this locally: a `pnpm -r build` from a
+      # clean checkout (no pre-existing dist/ anywhere) fails the same way.
+      - name: Build core
+        run: pnpm --filter @poe-ai/core build
+
       - name: Build all packages
         run: pnpm -r build
 
